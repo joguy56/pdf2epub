@@ -1,0 +1,6 @@
+*._*
+*.txt
+.gitignore
+*.png
+*.pdf
+tmp
