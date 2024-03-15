@@ -1,9 +1,9 @@
 #! /usr/bin/python3
-
+import os,re
+import time
 import shutil
 import subprocess
 from PIL import Image
-import os,re
 import easyocr, platform
 import platform
 from pytesseract import *
@@ -12,13 +12,13 @@ import imutils
 from tempfile import TemporaryDirectory
 import numpy as np
 import pandas as pd
-from pdf2image import convert_from_path
+from pdf2image import pdfinfo_from_path, convert_from_path
 from os.path import exists
 import argparse
-
+from datetime import datetime
 import language_tool_python
 import spacy
-#from ebooklib import epub
+from ebooklib import epub
 
 # Create a LanguageTool object for French
 tool = language_tool_python.LanguageTool('fr')
@@ -51,7 +51,8 @@ def parse_options():
     parser.add_argument("-t", "--title", help="the book's titel", required=False)
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true", required=False, default=False)
     parser.add_argument("--no-chap-detection", help="disable chapter detection (enabled by default)", action="store_true", required=False, default=False)
-    parser.add_argument("--chap-detect-thres-pct", help="percentage of page height from which a new chapter is beginning", required=False, default=35)
+    parser.add_argument("--chap-detect-thres-pct", help="percentage of page height from which a new chapter is beginning", required=False, default=35, type=int)
+    parser.add_argument("--no-cover", help="no cover image for this ebook", action='store_true', required=False, default=False)
 
     # Analysez les arguments de la ligne de commande
     args = parser.parse_args()
@@ -66,16 +67,28 @@ def convert_pdf(args):
         Part #1 : Converting PDF to images
         """
         print (f"created {tempdir} directory")
+        
+        info = pdfinfo_from_path(args.input, userpw=None, poppler_path=None)
+
+        maxPages = info["Pages"]
+        pdf_pages = []
         if platform.system() == "Windows":
             print("calling convert_from_path using poppler")
-            pdf_pages = convert_from_path(args.input, 500)
+            for page in range(1, maxPages+1, 10) : 
+                pdf_pages += convert_from_path(args.input, dpi=200, first_page=page, last_page = min(page+10-1,maxPages))
             print(f"pdf pages : {pdf_pages}")
         else:
-            pdf_pages = convert_from_path(args.input, 500)
+            for page in range(1, maxPages+1, 10) : 
+                pdf_pages += convert_from_path(args.input, dpi=200, first_page=page, last_page = min(page+10-1,maxPages))
+            print(f"pdf pages : {pdf_pages}")
         # Read in the PDF file at 500 DPI
 
+        if not args.no_cover:
+            pdf_pages[0].save(f"{tempdir}\cover.jpg", "JPEG")
+            pdf_pages.pop(0)
         # Iterate through all the pages stored above
-        for page_enumeration, page in enumerate(pdf_pages, start=1):
+        
+        for page_enumeration, page in enumerate(pdf_pages, start=1 if args.no_cover else 1):
             print(f"creating image for page {page}")
             filename = f"page_{page_enumeration:03}.jpg"
             page.save(f"{tempdir}\{filename}", "JPEG")
@@ -103,6 +116,8 @@ def select_files():
     
     for file in os.listdir(directory):
         filename = os.fsdecode(file)
+        if 'cover' in filename:
+            continue
         if filename.endswith(".png"):
             file_list.append(f"{tempdir}/{filename}")
             print(f"appending {filename}")
@@ -128,7 +143,8 @@ def is_junk(args, blockid, results):
     is_blank = stripped == ""
     
     print (f"is_junk(): has_special_chars: {has_special_chars} \t not_conf:{not_conf} \t page_nb:{page_number} \t is_blank: {is_blank}")
-    return (has_special_chars and not_conf) or page_number or is_blank
+    #return (has_special_chars and not_conf) or page_number or is_blank
+    return not_conf or page_number or is_blank
 
 def make_block_text(blockid, results):
     paragraphs = set([results['par_num'][i] for i, r in enumerate(results['block_num']) if r == blockid])
@@ -197,16 +213,28 @@ def make_ocr(args):
                 (x, y, w, h) = (results['left'][i], results['top'][i], results['width'][i], results['height'][i])
                 # draw green lines on boxes
                 cv2.rectangle(page_gray, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                
+                # eventual page numbers
+                if page_height - y < 70:
+                    continue
+                block_num = results['block_num'][i]
+                block_text = ' '.join([ results['text'][i] for i, r in enumerate(results['block_num']) if r == block_num]).strip()
+                print(f"block_text: {block_text}")
+                
                 if not args.no_chap_detection:
                     print(f"bloc pos : {y}, threshold:{new_chapter_thrs}: text_on_top: {text_on_top}")
                     if y > new_chapter_thrs and not text_on_top:
                         print(f"bloc pos : {y}, threshold:{new_chapter_thrs}: detected a new chapter")
                         text_on_top = True
-                        page_text += f'\n@@@ Chapitre  {chap_number} @@@\n'
+                        if 'chap' in block_text or 'Chap' in block_text:
+                            page_text += f'\n@@@ {block_text} @@@\n'
+                        else:
+                            page_text += f'\n@@@ Chapitre {block_text} @@@\n'
                         chap_number += 1
-                    elif y < new_chapter_thrs and not text_on_top:
+                        continue
+                    elif y <= new_chapter_thrs and not text_on_top:
                         text_on_top = True
-                page_text += make_block_text(results['block_num'][i], results)
+                page_text += make_block_text(block_num, results)
             if args.debug:
                 # Downsize and maintain aspect ratio
                 image2 = imutils.resize(page_gray, width=600)
@@ -220,6 +248,7 @@ def make_ocr(args):
     # Finally, write the processed text to the file.
     with open(args.input.rsplit(".", 1)[0] + f'_{args.OCR}.txt', "a", encoding='UTF-8') as output_file:
         output_file.write(final_text)
+    return final_text
 
 def post_process_text(args, text):
     lang = language_tool_python.LanguageTool(args.language[:2])
@@ -245,7 +274,7 @@ def post_process_text(args, text):
                 page = re.sub("\n.*" + filt + ".*\n", "\n", page)
         
         # mispells and grammar
-        page = lang.correct(page)
+        #page = lang.correct(page)
 
         # Update the element in the 'text' list with the modified string
         text[i] = page
@@ -255,68 +284,72 @@ def post_process_text(args, text):
     full_text = re.sub(r"([a-zA-Z%s,;])\n *([a-zA-z%s])"%(acc, acc),r"\1 \2", full_text)
     return full_text
 
-# def create_epub(args, text):
-#     if not args.title:
-#         output_epub = pypub.Epub(args.input.rsplit(".", 1)[0])
-#     else:
-#         output_epub = pypub.Epub(args.title)
+def create_epub(args, text):
+    print("creating epub")
+    book = epub.EpubBook()
     
-    # coding=utf-8
-
-
-
-
-# if __name__ == '__main__':
-#     book = epub.EpubBook()
-
-#     # add metadata
-#     book.set_identifier('sample123456')
-#     book.set_title('Sample book')
-#     book.set_language('en')
-
-#     book.add_author('Aleksandar Erkalovic')
-
-#     # intro chapter
-#     c1 = epub.EpubHtml(title='Introduction', file_name='intro.xhtml', lang='hr')
-#     c1.content=u'<html><head></head><body><h1>Introduction</h1><p>Introduction paragraph where i explain what is happening.</p></body></html>'
-
-#     # defube style
-#     style = '''BODY { text-align: justify;}'''
-
-#     default_css = epub.EpubItem(uid="style_default", file_name="style/default.css", media_type="text/css", content=style)
-#     book.add_item(default_css)
-
-
-#     # about chapter
-#     c2 = epub.EpubHtml(title='About this book', file_name='about.xhtml')
-#     c2.content='<h1>About this book</h1><p>Helou, this is my book! There are many books, but this one is mine.</p>'
-#     c2.set_language('hr')
-#     c2.properties.append('rendition:layout-pre-paginated rendition:orientation-landscape rendition:spread-none')
-#     c2.add_item(default_css)
-
-#     # add chapters to the book
-#     book.add_item(c1)
-#     book.add_item(c2)
-
-
+    if not args.no_cover:
+        book.set_cover(f"image.jpg", open(f'{tempdir}\cover.jpg', 'rb').read())
     
-#     # create table of contents
-#     # - add manual link
-#     # - add section
-#     # - add auto created links to chapters
+    # add metadata
+    if not args.title:
+        title = args.input.rsplit(".", 1)[0]
+    else:
+        title = args.title
+    book.set_title(title)
+    book.set_language(args.language[0:-1])
+    book.add_author(args.author)
+    
+    ct = datetime.now().timestamp()
+    book.set_identifier(f"{str(ct)}_{title.replace(' ', ' ')[0-8]}")
 
-#     book.toc = (epub.Link('intro.xhtml', 'Introduction', 'intro'),
-#                 (epub.Section('Languages'),
-#                  (c1, c2))
-#                 )
+    # Step 1: Split the string using the token '@@@'
+    elements = text.split('@@@')
+    # Step 2: Create a dictionary from the elements
+    result_dict = {}
+    for i in range(1, len(elements), 2):
+        key = elements[i]
+        value = elements[i + 1]
+        result_dict[key] = value
 
-#     # add navigation files
-#     book.add_item(epub.EpubNcx())
-#     book.add_item(epub.EpubNav())
+    # for every chapter
+    chapters = []
+    for k,v in result_dict.items():
+        chap = epub.EpubHtml(title=k, file_name=f"{k.replace(' ', '')}.xhtml", lang='hr')
+        chap.content = f'<html><head></head><body><h1>{k}</h1>'
+        for line in v.split('\n'):
+            chap.content += f"<p>{line}</p>"
+        chap.content += "</body></html>"
+        chapters.append(chap)
 
-#     # define css style
-#     style = '''
-# @namespace epub "http://www.idpf.org/2007/ops";
+    # defube style
+    style = '''BODY { text-align: justify;}'''
+
+    default_css = epub.EpubItem(uid="style_default", file_name="style/default.css", media_type="text/css", content=style)
+    book.add_item(default_css)
+
+
+    # add chapters to the book
+    for chap in chapters:
+        book.add_item(chap)
+    
+    # create table of contents
+    # - add manual link
+    # - add section
+    # - add auto created links to chapters
+
+    # book.toc = (epub.Link('intro.xhtml', 'Introduction', 'intro'),
+    #             (epub.Section('Languages'),
+    #              (c1, c2))
+    #             )
+
+    # add navigation files
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+
+    # define css style
+    style = '''
+@namespace epub "http://www.idpf.org/2007/ops";
 
 # body {
 #     font-family: Cambria, Liberation Serif, Bitstream Vera Serif, Georgia, Times, Times New Roman, serif;
@@ -348,15 +381,19 @@ def post_process_text(args, text):
 
 # '''
 
-#     # add css file
-#     nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
-#     book.add_item(nav_css)
+    # add css file
+    nav_css = epub.EpubItem(uid="style_nav", file_name="style/nav.css", media_type="text/css", content=style)
+    book.add_item(nav_css)
 
-#     # create spine
-#     book.spine = ['nav', c1, c2]
+    # create spine
+    book.spine = ['nav' ] + [ c for c in chapters ]
 
-#     # create epub file
-#     epub.write_epub('test.epub', book, {})
+    # create epub file
+    epub_filename = args.input.split('.')[0] + '.epub'
+    if os.path.isfile(epub_filename):
+        print(f"file {epub_filename} already exists, deleting it")
+        os.remove(epub_filename)
+    epub.write_epub(epub_filename, book, {})
 
 
 
@@ -364,16 +401,29 @@ def post_process_text(args, text):
     
 
 def main():
+    start_time = time.time()
     args = parse_options()
     if not args.recognize_only :
         shutil.rmtree(tempdir)
         os.mkdir(tempdir)
+        files = os.listdir()
+        for f in files:
+            if args.input.split(".")[0] in f and f.split('.')[1] != 'pdf':
+                os.unlink(f)
+                print(f"deleted {f}")
         convert_pdf(args)
     else:
         print("proceeding directly to the text recognition")
     text = make_ocr(args)
-    #create_epub(args, text)
+    create_epub(args, text)
+    end_time = time.time()
     
+    duration = end_time - start_time
+    minutes = int(duration / 60)
+    minutes_str = str(minutes) + 'm' if minutes > 0 else ''
+    seconds = int(duration % 60)
+    seconds_str = str(seconds) + 's' if seconds > 0 else ''
+    print(f'done in {minutes_str}{seconds_str}')
 
 
 if __name__ == "__main__":
