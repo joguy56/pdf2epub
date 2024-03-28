@@ -151,8 +151,13 @@ def is_junk(args, blockid, results, current_chap_title):
     Determine if a block of text is junk.
     """
     blktext = ' '.join([results['text'][i] for i, r in enumerate(results['block_num']) if r == blockid])
-    is_title_header = SequenceMatcher(re.sub(' +', ' ', blktext.strip()), re.sub(' +', ' ', args.title.strip())).ratio() > 0.85 if args.title else False
-    is_chap_header = SequenceMatcher(re.sub(' +', ' ', blktext.strip()), re.sub(' +', ' ', current_chap_title.strip())).ratio() > 0.85
+    #logger.debug(f"is_junk(): blktext: {blktext}, current_chap_title: {current_chap_title}")
+    ratio = SequenceMatcher(a=re.sub(' +', ' ', blktext.strip()), b=re.sub(' +', ' ', args.title.strip())).ratio()
+    logger.debug(f"is_junk(): title ratio: {ratio}")
+    is_title_header = ratio > 0.9 if args.title else False
+    ratio = SequenceMatcher(a=re.sub(' +', ' ', blktext.strip()), b=re.sub(' +', ' ', current_chap_title.strip())).ratio()
+    logger.debug(f"is_junk(): chapter ratio: {ratio}")
+    is_chap_header = ratio > 0.9
     has_special_chars = True in [c in blktext for c in """<>&_()*+=\/{}#@"""]
     not_conf_list = [results['conf'][i] < 80 for i, r in enumerate(results['block_num']) if
                      (r == blockid and results['level'][i] == 5)]
@@ -254,12 +259,12 @@ def make_ocr(args):
                     if y > new_chapter_thrs and not text_on_top:
                         logger.debug(f"Detected a new chapter")
                         text_on_top = True
-                        chap_text = block_text if len(block_text) < 30 else str(chap_number)
+                        chap_text = block_text if len(block_text) < 40 else str(chap_number)
                         page_text += f'\n@@@ {chap_text} @@@\n'
                         current_chapter = chap_text
                         chap_number += 1
                         
-                        if len(block_text) < 30: # assuming that if this block_text > 30, it is real text, not chapter
+                        if len(block_text) < 40: # chapter detected and already inserted as such in page.
                             continue
                     elif y <= new_chapter_thrs and not text_on_top:
                         text_on_top = True
@@ -270,6 +275,7 @@ def make_ocr(args):
                 # After all, we will show the output image 
                 cv2.imshow("Image", image2) 
                 cv2.waitKey(0) 
+            #logger.debug(f"appending : {page_text}")
             final_text.append(page_text)
 
     #logger.info(f"Read text: {final_text}")
@@ -291,7 +297,7 @@ def post_process_text(args, text):
         # double hyphens at begin of a line
         page = re.sub(r"\n( *)[\u2014-]+( *)", r"\n\1-\2", page)
         # simple hyphens
-        page = re.sub(r"([a-zA-Z%s]+) *[\u2014-] *([a-zA-Z%s]+)" % (acc, acc), r"\1-\2", page)
+        page = re.sub(r"([a-zA-Z%s]+) *[\u2014-]+ *([a-zA-Z%s]+)" % (acc, acc), r"\1-\2", page)
         # word cut on two lines
         page = re.sub(r"([a-zA-Z%s]+) *[\u2014-] *\n+ *([a-zA-Z%s]+)" % (acc, acc), r"\1\2", page)
         # blank lines
@@ -342,7 +348,7 @@ def create_epub(args, text):
     sections_dict = {}
     if sections[0] == '' or sections[0] == '\n':
         sections.pop(0)
-    elif len(sections) % 2:
+    elif len(sections) % 2 and len(sections) > 2:
         sections_dict['0'] = sections.pop(0)
     only_chapters = len(sections) == 1
     chapters = []
@@ -476,6 +482,11 @@ def main():
     
     if not args.generate_epub_only:
         text = make_ocr(args)
+    else:
+        text = ''
+        with open(args.input.rsplit(".", 1)[0] + f'_{args.OCR}.txt', "rb") as input_file:
+            text = input_file.read().decode("utf-8")
+            logger.debug(text)
     epub_file = create_epub(args, text)
     shutil.move(epub_file, args.input.rsplit(".", 1)[0] + ".epub")
     
