@@ -21,6 +21,7 @@ import spacy
 from ebooklib import epub
 import logging
 import colorlog
+from difflib import SequenceMatcher
 
 ## Initialize configuration parser
 #config = configparser.ConfigParser()
@@ -61,10 +62,11 @@ def parse_options():
     parser.add_argument("-i", "--input", help="Nom du fichier d'entrée", required=True)
     parser.add_argument("-O", "--OCR", help="The OCR to use easyOCR|tesseract", required=False, default="tesseract")
     parser.add_argument("-r", "--recognize-only", help="starts directly to the recognition step", action="store_true", required=False)
+    parser.add_argument("-g", "--generate-epub-only", help="starts directly to the epub generation", action="store_true", required=False)
     parser.add_argument("-f", "--filter", help="some lines that should be filtered", action="append", required=False)
     parser.add_argument("-l", "--language", help="french (fra - default) or english (eng)", required=False, default='fra')
     parser.add_argument("-a", "--author", help="the author of the book", required=False)
-    parser.add_argument("-t", "--title", help="the book's titel", required=False)
+    parser.add_argument("-t", "--title", help="the book's title", required=False)
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true", required=False, default=False)
     parser.add_argument("--no-chap-detection", help="disable chapter detection (enabled by default)", action="store_true", required=False, default=False)
     parser.add_argument("--chap-detect-thres-pct", help="percentage of page height from which a new chapter is beginning", required=False, default=25, type=int)
@@ -144,11 +146,13 @@ def select_files():
     return file_list
 
 
-def is_junk(args, blockid, results):
+def is_junk(args, blockid, results, current_chap_title):
     """
     Determine if a block of text is junk.
     """
     blktext = ' '.join([results['text'][i] for i, r in enumerate(results['block_num']) if r == blockid])
+    is_title_header = SequenceMatcher(re.sub(' +', ' ', blktext.strip()), re.sub(' +', ' ', args.title.strip())).ratio() > 0.85 if args.title else False
+    is_chap_header = SequenceMatcher(re.sub(' +', ' ', blktext.strip()), re.sub(' +', ' ', current_chap_title.strip())).ratio() > 0.85
     has_special_chars = True in [c in blktext for c in """<>&_()*+=\/{}#@"""]
     not_conf_list = [results['conf'][i] < 80 for i, r in enumerate(results['block_num']) if
                      (r == blockid and results['level'][i] == 5)]
@@ -156,8 +160,8 @@ def is_junk(args, blockid, results):
     page_number = re.search('^ +[0-9]+ *$', blktext)
     stripped = blktext.strip()
     is_blank = stripped == ""
-    logger.debug(f"is_junk(): has_special_chars: {has_special_chars} \t not_conf:{not_conf} \t page_nb:{page_number} \t is_blank: {is_blank}")
-    return not_conf or page_number or is_blank
+    logger.debug(f"is_junk(): has_special_chars: {has_special_chars} \t not_conf:{not_conf} \t page_nb:{page_number} \t is_blank: {is_blank} \t is_chap_header:{is_chap_header} \t is_title_header:{is_title_header}")
+    return not_conf or page_number or is_blank or is_chap_header or is_title_header
 
 
 def make_block_text(blockid, results):
@@ -183,6 +187,7 @@ def make_ocr(args):
     image_file_list = select_files()
     final_text = []
     chap_number = 1
+    current_chapter = ""
 
     for image_file in image_file_list:
         image = Image.open(image_file)
@@ -211,7 +216,7 @@ def make_ocr(args):
             # Need to detect all junks on the page
             junk = []
             for i in blocks_idx:
-                if is_junk(args, results['block_num'][i], results):
+                if is_junk(args, results['block_num'][i], results, current_chapter):
                     logger.debug(f"Detected that block {results['block_num'][i]} is junk")
                     junk.append(results['block_num'][i])
             
@@ -224,6 +229,7 @@ def make_ocr(args):
                 logger.debug(f"block position : {(x, y)}")
                 logger.debug(f"block dimension : {(w, h)}")
                 
+                
                 # eventual page numbers
                 if page_height - y < 70:
                     continue
@@ -235,7 +241,7 @@ def make_ocr(args):
                 logger.debug(f"Page text: {full_page_text}")
 
                 # New section detection
-                if (page_width - w) > (page_width / 3) and y > (page_height / 5) and not text_on_top and block_text == full_page_text:
+                if (page_width - w) > (page_width / 3) and y > (page_height / 5) and not text_on_top and block_text == full_page_text and len(block_text) < 50:
                     logger.debug(f"Detected a new section")
                     page_text += f'\n$$$ {full_page_text} $$$\n'
                     continue
@@ -249,10 +255,8 @@ def make_ocr(args):
                         logger.debug(f"Detected a new chapter")
                         text_on_top = True
                         chap_text = block_text if len(block_text) < 30 else str(chap_number)
-                        if 'chap' in chap_text or 'Chap' in chap_text:
-                            page_text += f'\n@@@ {chap_text} @@@\n'
-                        else:
-                            page_text += f'\n@@@ Chapitre {chap_text} @@@\n'
+                        page_text += f'\n@@@ {chap_text} @@@\n'
+                        current_chapter = chap_text
                         chap_number += 1
                         
                         if len(block_text) < 30: # assuming that if this block_text > 30, it is real text, not chapter
@@ -268,7 +272,7 @@ def make_ocr(args):
                 cv2.waitKey(0) 
             final_text.append(page_text)
 
-    logger.info(f"Read text: {final_text}")
+    #logger.info(f"Read text: {final_text}")
     final_text = post_process_text(args, final_text)
     # The recognized text is stored in variable text
     # Finally, write the processed text to the file.
@@ -284,9 +288,17 @@ def post_process_text(args, text):
     lang = language_tool_python.LanguageTool(args.language[:2])
     acc = "àèìòùÀÈÌÒÙáéíóúýÁÉÍÓÚÝâêîôûÂÊÎÔÛãñõÃÑÕäëïöüÿÄËÏÖÜŸçÇßØøÅåÆæœ"
     for i, page in enumerate(text):
-        page = re.sub(r"([a-zA-Z%s]) *[\u2014-] *\n *([a-zA-Z%s])" % (acc, acc), r"\1\2", page)
+        # double hyphens at begin of a line
+        page = re.sub(r"\n( *)[\u2014-]+( *)", r"\n\1-\2", page)
+        # simple hyphens
+        page = re.sub(r"([a-zA-Z%s]+) *[\u2014-] *([a-zA-Z%s]+)" % (acc, acc), r"\1-\2", page)
+        # word cut on two lines
+        page = re.sub(r"([a-zA-Z%s]+) *[\u2014-] *\n+ *([a-zA-Z%s]+)" % (acc, acc), r"\1\2", page)
+        # blank lines
         page = re.sub(r"\n\n+", "\n", page)
+        # single quote character
         page = re.sub('‘', "’", page)
+        # dialogs indent
         page = re.sub(r'\n ?([\u2014-]) ?([a-zA-Z%s])(.*)(\n|$)' % acc, r"\n    \1 \2\3\n", page)
         page = re.sub(r'\n ?([\u2014-]) ?([a-zA-Z%s])(.*)(\n|$)' % acc, r"\n    \1 \2\3\n", page)
 
@@ -301,7 +313,7 @@ def post_process_text(args, text):
         
     # blank lines between pages
     full_text = '\n'.join(text)
-    full_text = re.sub(r"([a-zA-Z%s,;])\n *([a-zA-z%s])" % (acc, acc), r"\1 \2", full_text)
+    full_text = re.sub(r"([a-zA-Z%s,;])\n+([a-zA-z%s])" % (acc, acc), r"\1 \2", full_text)
     return full_text
 
 
@@ -323,13 +335,16 @@ def create_epub(args, text):
     book.add_author(args.author)
 
     ct = datetime.now().timestamp()
-    book.set_identifier(f"{str(ct)}_{title.replace(' ', ' ')[0-8]}")
+    title_repl = title if len(title) <= 8 else title[0:8]
+    book.set_identifier(f"{str(ct)}_{title_repl.replace(' ', '')}")
 
     sections = text.split('$$$')
+    sections_dict = {}
     if sections[0] == '' or sections[0] == '\n':
         sections.pop(0)
+    elif len(sections) % 2:
+        sections_dict['0'] = sections.pop(0)
     only_chapters = len(sections) == 1
-    sections_dict = {}
     chapters = []
     logger.debug(f"{len(sections)} sections : {sections}")
     for i in range(0, len(sections), 2):
@@ -344,10 +359,12 @@ def create_epub(args, text):
         
         # Split text into chapters
         chap_elem = sect_value.split('@@@')
+        chap_dict = {}
         if re.search('\n+', chap_elem[0]):
             chap_elem.pop(0)
+        elif len(sect_value) % 2:
+            chap_dict['0'] = chap_elem.pop(0)
         logger.debug(f'{len(chap_elem)} chap_elem: {chap_elem}')
-        chap_dict = {}
         for i in range(0, len(chap_elem), 2):
             chap_key = chap_elem[i]
             chap_value = chap_elem[i + 1]
@@ -362,7 +379,7 @@ def create_epub(args, text):
             for line in v.split('\n'):
                 chap.content += f"<p>{line}</p>"
             chap.content += "</body></html>"
-            logger.debug(f"appending chapter : {chap.content}")
+            logger.debug(f"appending chapter : {chap.content[0:15]}...")
             chapters.append(chap)
 
     # Add style
@@ -444,7 +461,7 @@ def main():
     """
     start_time = time.time()
     args = parse_options()
-    if not args.recognize_only :
+    if not args.recognize_only and not args.generate_epub_only :
         if os.path.exists(tempdir):
             shutil.rmtree(tempdir)
         os.mkdir(tempdir)
@@ -457,7 +474,8 @@ def main():
     else:
         print("proceeding directly to the text recognition")
     
-    text = make_ocr(args)
+    if not args.generate_epub_only:
+        text = make_ocr(args)
     epub_file = create_epub(args, text)
     shutil.move(epub_file, args.input.rsplit(".", 1)[0] + ".epub")
     
