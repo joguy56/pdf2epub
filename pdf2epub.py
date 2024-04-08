@@ -56,21 +56,24 @@ def parse_options():
     Parse command-line arguments.
     """
     # Create an ArgumentParser object
-    parser = argparse.ArgumentParser(description="Programme de test prenant deux noms de fichiers en ligne de commande.")
+    parser = argparse.ArgumentParser(description="Program that converts pdf text file to epub.")
 
     # Add optional arguments
     parser.add_argument("-i", "--input", help="Nom du fichier d'entrée", required=True)
     parser.add_argument("-O", "--OCR", help="The OCR to use easyOCR|tesseract", required=False, default="tesseract")
+    parser.add_argument("--tesseract-dir", help="the directory of tesseract binary", required=False, default='')
     parser.add_argument("-r", "--recognize-only", help="starts directly to the recognition step", action="store_true", required=False)
     parser.add_argument("-g", "--generate-epub-only", help="starts directly to the epub generation", action="store_true", required=False)
     parser.add_argument("-f", "--filter", help="some lines that should be filtered", action="append", required=False)
     parser.add_argument("-l", "--language", help="french (fra - default) or english (eng)", required=False, default='fra')
     parser.add_argument("-a", "--author", help="the author of the book", required=False)
-    parser.add_argument("-t", "--title", help="the book's title", required=False)
+    parser.add_argument("-t", "--title", help="the book's title", required=False, default='')
     parser.add_argument("-d", "--debug", help="debug mode", action="store_true", required=False, default=False)
     parser.add_argument("--no-chap-detection", help="disable chapter detection (enabled by default)", action="store_true", required=False, default=False)
     parser.add_argument("--chap-detect-thres-pct", help="percentage of page height from which a new chapter is beginning", required=False, default=25, type=int)
     parser.add_argument("--no-cover", help="no cover image for this ebook", action='store_true', required=False, default=False)
+    parser.add_argument("-x", "--x-margin", help="x cropping margin", default="30", required=False)
+    parser.add_argument("-y", "--y-margin", help="y cropping margin", default="50", required=False)
 
     # Parse command-line arguments
     args = parser.parse_args()
@@ -119,7 +122,7 @@ def convert_pdf(args):
         cv2.imwrite(f"{tempdir}/{filename}", image)
 
         # Perform page dewarping
-        subprocess.Popen(['page-dewarp', '-oscreen', '-d0', '-f 1.2', '-x 20', '-y 50', filename], cwd=tempdir).communicate()
+        subprocess.Popen(['page-dewarp', '-oscreen', '-d0', '-f 1.2', f'-x {args.x_margin}', f'-y {args.y_margin}', filename], cwd=tempdir).communicate()
 
 
 def select_files():
@@ -146,7 +149,7 @@ def select_files():
     return file_list
 
 
-def is_junk(args, blockid, results, current_chap_title):
+def is_junk(args, blockid, results, current_chap_title, new_chap_thrs):
     """
     Determine if a block of text is junk.
     """
@@ -157,8 +160,12 @@ def is_junk(args, blockid, results, current_chap_title):
     is_title_header = ratio > 0.9 if args.title else False
     ratio = SequenceMatcher(a=re.sub(' +', ' ', blktext.strip()), b=re.sub(' +', ' ', current_chap_title.strip())).ratio()
     logger.debug(f"is_junk(): chapter ratio: {ratio}")
-    is_chap_header = ratio > 0.9
-    has_special_chars = True in [c in blktext for c in """<>&_()*+=\/{}#@"""]
+    is_chap_header = ratio > 0.9 and all([ results['top'][i] < new_chap_thrs for i, r in enumerate(results['block_num']) if r == blockid])
+    cmp_set = {c for c in blktext if c != ' '}
+    has_special_chars = False
+    nb_special_chars = sum(c in cmp_set for c in r"<>&_()*+=\/{}#@¡¿†‡¶€¥ü∑∫¢@+-…äëïöüñßÄËÏÖÜÑ ")
+    if nb_special_chars > 0:
+        has_special_chars = nb_special_chars / len(cmp_set) >= 0.3
     not_conf_list = [results['conf'][i] < 80 for i, r in enumerate(results['block_num']) if
                      (r == blockid and results['level'][i] == 5)]
     not_conf = float(not_conf_list.count(True)) / float(len(not_conf_list)) > 0.6
@@ -166,7 +173,7 @@ def is_junk(args, blockid, results, current_chap_title):
     stripped = blktext.strip()
     is_blank = stripped == ""
     logger.debug(f"is_junk(): has_special_chars: {has_special_chars} \t not_conf:{not_conf} \t page_nb:{page_number} \t is_blank: {is_blank} \t is_chap_header:{is_chap_header} \t is_title_header:{is_title_header}")
-    return not_conf or page_number or is_blank or is_chap_header or is_title_header
+    return has_special_chars or not_conf or page_number or is_blank or is_chap_header or is_title_header
 
 
 def make_block_text(blockid, results):
@@ -193,10 +200,9 @@ def make_ocr(args):
     final_text = []
     chap_number = 1
     current_chapter = ""
-
+         
     for image_file in image_file_list:
         image = Image.open(image_file)
-        page_arr = np.asarray(image)
         page_gray = cv2.imread(image_file, cv2.IMREAD_GRAYSCALE)
         logger.info(f"Processing OCR on page {image_file}")
         
@@ -205,7 +211,11 @@ def make_ocr(args):
             final_text = reader.readtext(page_gray, width_ths=0.7, ycenter_ths=0.5, height_ths=0.7, paragraph=True,
                                           detail=0)
         else:  # tesseract
-            os.environ['TESSDATA_PREFIX'] = "C:/Users/jguyot/AppData/Local/Programs/Tesseract-OCR/tessdata"
+            if not 'TESSDATA_PREFIX' in os.environ and not args.tesseract_dir:
+                raise FileNotFoundError("At least the tesseract directory needs to be known. Use TESSDATA_PREFIX environment variable or the tesseract_dir option")
+            elif args.tesseract_dir:
+                #os.environ['TESSDATA_PREFIX'] = "C:/Users/jguyot/AppData/Local/Programs/Tesseract-OCR/tessdata"
+                os.environ['TESSDATA_PREFIX'] = args.tesseract_dir
             results = pytesseract.image_to_data(page_gray, lang=args.language, output_type=Output.DICT)
             results_df = pd.DataFrame.from_dict(results)
             page_width = results_df['width'][0]
@@ -221,10 +231,10 @@ def make_ocr(args):
             # Need to detect all junks on the page
             junk = []
             for i in blocks_idx:
-                if is_junk(args, results['block_num'][i], results, current_chapter):
-                    logger.debug(f"Detected that block {results['block_num'][i]} is junk")
+                if is_junk(args, results['block_num'][i], results, current_chapter, new_chapter_thrs):
+                    logger.debug(f"Detected that block {results['block_num'][i]}: {results['text'][i]} is junk")
                     junk.append(results['block_num'][i])
-            
+
             for i in blocks_idx:
                 if results['block_num'][i] in junk:
                     continue
@@ -246,7 +256,7 @@ def make_ocr(args):
                 logger.debug(f"Page text: {full_page_text}")
 
                 # New section detection
-                if (page_width - w) > (page_width / 3) and y > (page_height / 5) and not text_on_top and block_text == full_page_text and len(block_text) < 50:
+                if (page_width - w) > (page_width / 3) and y > (page_height / 5) and not text_on_top and block_text == full_page_text and len(block_text) < 50 and not "chapitre" in block_text.lower():
                     logger.debug(f"Detected a new section")
                     page_text += f'\n$$$ {full_page_text} $$$\n'
                     continue
@@ -256,19 +266,29 @@ def make_ocr(args):
                 logger.debug(f"no chap detection: {args.no_chap_detection}")
                 logger.debug(f"text_on_top: {text_on_top}")
                 if not args.no_chap_detection:
-                    if y > new_chapter_thrs and not text_on_top:
+                    # the block must not be at top, not be near the end of page, but somewhere in
+                    # the middle
+                    if y > new_chapter_thrs and y < (0.75 * page_height) and not text_on_top:
                         logger.debug(f"Detected a new chapter")
                         text_on_top = True
-                        chap_text = block_text if len(block_text) < 40 else str(chap_number)
+                        chap_text = block_text if len(block_text) < 40 else 'Chapitre'
+                        if block_text == full_page_text and len(block_text) < 40:
+                            continue
+                        logger.debug(f"Detecting that text is beginning in middle of the page")
+                        if chap_text.lower() == "chapitre":
+                            chap_text += f" {chap_number}"
                         page_text += f'\n@@@ {chap_text} @@@\n'
                         current_chapter = chap_text
                         chap_number += 1
                         
                         if len(block_text) < 40: # chapter detected and already inserted as such in page.
                             continue
-                    elif y <= new_chapter_thrs and not text_on_top:
+                    elif y > new_chapter_thrs and not text_on_top:
+                        text_on_top = True
+                    else:
                         text_on_top = True
                 page_text += make_block_text(block_num, results)
+            
             if args.debug:
                 # Downsize and maintain aspect ratio
                 image2 = imutils.resize(page_gray, width=600)
@@ -307,11 +327,17 @@ def post_process_text(args, text):
         # dialogs indent
         page = re.sub(r'\n ?([\u2014-]) ?([a-zA-Z%s])(.*)(\n|$)' % acc, r"\n    \1 \2\3\n", page)
         page = re.sub(r'\n ?([\u2014-]) ?([a-zA-Z%s])(.*)(\n|$)' % acc, r"\n    \1 \2\3\n", page)
+        # lettrine
+        page = re.sub(r'\n([a-zA-Z]) ', r'\n\1', page)
+        # footnotes
+        page = re.sub(r"\n([1-9]\. +.*)", r"\n~~~\1~~~", page)
 
         if args.filter is not None:
             for filt in args.filter:
                 page = re.sub("\n.*" + filt + ".*\n", "\n", page)
-        
+        # malformed Je
+        page = page.replace(']e', 'Je')
+        page = page.replace(']’', 'J’')
         # mispells and grammar
         #page = lang.correct(page)
 
