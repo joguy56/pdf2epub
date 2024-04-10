@@ -16,7 +16,7 @@ from pdf2image import pdfinfo_from_path, convert_from_path
 from os.path import exists
 import argparse
 from datetime import datetime
-import language_tool_python
+#import language_tool_python
 import spacy
 from ebooklib import epub
 import logging
@@ -237,7 +237,12 @@ def make_ocr(args):
                     logger.debug(f"Detected that block {results['block_num'][i]}: {results['text'][i]} is junk")
                     junk.append(results['block_num'][i])
 
+            block_already_processed = False
             for i in blocks_idx:
+                if block_already_processed:
+                    block_already_processed = False
+                    continue
+
                 if results['block_num'][i] in junk:
                     continue
 
@@ -270,15 +275,26 @@ def make_ocr(args):
                 if not args.no_chap_detection:
                     # the block must not be at top, not be near the end of page, but somewhere in
                     # the middle
-                    if y > new_chapter_thrs and y < (0.75 * page_height) and not text_on_top:
+                    if y > (new_chapter_thrs * 0.95) and y < (0.75 * page_height) and not text_on_top:
                         logger.debug(f"Detected a new chapter")
                         text_on_top = True
                         chap_text = block_text if len(block_text) < 40 else 'Chapitre'
+                        # in case chap title is on two lines
+                        try:
+                            next_block_height = [results['height'][j] for j,r in enumerate(results['block_num']) if r == block_num + 1][0]
+                            if abs(h - next_block_height) < 5:
+                                logger.debug(f"next block is the same size: {next_block_height}")
+                                chap_text += ' '.join([results['text'][i] for i, r in enumerate(results['block_num']) if r == block_num + 1])
+                                chap_text = re.sub(r" +", " ", chap_text)
+                                block_already_processed = True
+                        except IndexError:
+                            pass
                         if block_text == full_page_text and len(block_text) < 40:
                             continue
                         logger.debug(f"Detecting that text is beginning in middle of the page")
                         if chap_text.lower() == "chapitre":
                             chap_text += f" {chap_number}"
+                        chap_text = re.sub(r"[\(\)\[\]\|]", "", chap_text)
                         page_text += f'\n@@@ {chap_text} @@@\n'
                         current_chapter = chap_text
                         chap_number += 1
@@ -315,7 +331,7 @@ def post_process_text(args, text):
     """
     Perform post-processing on OCR text.
     """
-    lang = language_tool_python.LanguageTool(args.language[:2])
+    #lang = language_tool_python.LanguageTool(args.language[:2])
     acc = "àèìòùÀÈÌÒÙáéíóúýÁÉÍÓÚÝâêîôûÂÊÎÔÛãñõÃÑÕäëïöüÿÄËÏÖÜŸçÇßØøÅåÆæœ"
     for i, page in enumerate(text):
         # double hyphens at begin of a line
@@ -386,7 +402,7 @@ def create_epub(args, text):
         sections_dict['0'] = sections.pop(0)
     only_chapters = len(sections) == 1
     chapters = []
-    logger.debug(f"{len(sections)} sections : {sections}")
+    logger.debug(f"{len(sections)} sections")
     for i in range(0, len(sections), 2):
         logger.debug(f"working on section {i}")
         if only_chapters:
@@ -411,7 +427,9 @@ def create_epub(args, text):
             chap_dict[chap_key] = chap_value
 
         for k, v in chap_dict.items():
-            chap = epub.EpubHtml(title=k, file_name=f"{k.replace(' ', '')}.xhtml", lang='hr')
+            logger.debug(f'processing chapter: {k}')
+            f = re.sub(r'[ \?\!\.]', '', k)
+            chap = epub.EpubHtml(title=k, file_name=f"{f}.xhtml", lang='hr')
             if not only_chapters:
                 chap.content = f'<html><head></head><body><h1>{sect_key}</h1></br><h2>{k}</h2>'
             else:
@@ -419,7 +437,6 @@ def create_epub(args, text):
             for line in v.split('\n'):
                 chap.content += f"<p>{line}</p>"
             chap.content += "</body></html>"
-            logger.debug(f"appending chapter : {chap.content[0:15]}...")
             chapters.append(chap)
 
     # Add style
@@ -430,6 +447,7 @@ def create_epub(args, text):
 
     # Add chapters to the book
     for chap in chapters:
+        logger.debug(chap)
         book.add_item(chap)
     
     # create table of contents
