@@ -78,6 +78,13 @@ def parse_options():
     # Parse command-line arguments
     args = parser.parse_args()
 
+    if args.OCR == 'tesseract':
+        if not 'TESSDATA_PREFIX' in os.environ and not args.tesseract_dir:
+            raise FileNotFoundError("At least the tesseract directory needs to be known. Use TESSDATA_PREFIX environment variable or the tesseract_dir option")
+        elif args.tesseract_dir:
+            #os.environ['TESSDATA_PREFIX'] = "C:/Users/jguyot/AppData/Local/Programs/Tesseract-OCR/tessdata"
+            os.environ['TESSDATA_PREFIX'] = args.tesseract_dir
+
     # Log parsed arguments
     logger.info(f"Parsed options: {args}")
     return args
@@ -211,11 +218,6 @@ def make_ocr(args):
             final_text = reader.readtext(page_gray, width_ths=0.7, ycenter_ths=0.5, height_ths=0.7, paragraph=True,
                                           detail=0)
         else:  # tesseract
-            if not 'TESSDATA_PREFIX' in os.environ and not args.tesseract_dir:
-                raise FileNotFoundError("At least the tesseract directory needs to be known. Use TESSDATA_PREFIX environment variable or the tesseract_dir option")
-            elif args.tesseract_dir:
-                #os.environ['TESSDATA_PREFIX'] = "C:/Users/jguyot/AppData/Local/Programs/Tesseract-OCR/tessdata"
-                os.environ['TESSDATA_PREFIX'] = args.tesseract_dir
             results = pytesseract.image_to_data(page_gray, lang=args.language, output_type=Output.DICT)
             results_df = pd.DataFrame.from_dict(results)
             page_width = results_df['width'][0]
@@ -297,6 +299,8 @@ def make_ocr(args):
                 cv2.waitKey(0) 
             #logger.debug(f"appending : {page_text}")
             final_text.append(page_text)
+        # end page marker
+        final_text.append("§")
 
     #logger.info(f"Read text: {final_text}")
     final_text = post_process_text(args, final_text)
@@ -329,8 +333,6 @@ def post_process_text(args, text):
         page = re.sub(r'\n ?([\u2014-]) ?([a-zA-Z%s])(.*)(\n|$)' % acc, r"\n    \1 \2\3\n", page)
         # lettrine
         page = re.sub(r'\n([a-zA-Z]) ', r'\n\1', page)
-        # footnotes
-        page = re.sub(r"\n([1-9]\. +.*)", r"\n~~~\1~~~", page)
 
         if args.filter is not None:
             for filt in args.filter:
@@ -342,10 +344,16 @@ def post_process_text(args, text):
         #page = lang.correct(page)
 
         text[i] = page
-        
+    
     # blank lines between pages
     full_text = '\n'.join(text)
+    # footnotes
+    full_text = re.sub(r"(\n1\..*?§)", r'\n~~~\n\1\n~~~\n', full_text, flags=re.DOTALL) # § stands for textual end page marker
+    # no need of end page markers anymore
+    full_text = full_text.replace('§', '')
+    # deletion of unnecessary blank lines
     full_text = re.sub(r"([a-zA-Z%s,;])\n+([a-zA-z%s])" % (acc, acc), r"\1 \2", full_text)
+    full_text = full_text.replace("\n\n", "\n")
     return full_text
 
 
