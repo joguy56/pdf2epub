@@ -1,0 +1,141 @@
+[tool.poetry]
+name = "pdf2epub"
+version = "2.0.0"
+description = "A robust Python tool for converting scanned PDF books into EPUB ebooks using OCR"
+authors = ["jguyot"]
+readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/jguyot/pdf2epub"
+keywords = ["pdf", "epub", "ocr", "tesseract", "ebook", "converter"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Graphics :: Capture :: Scanners",
+    "Topic :: Text Processing",
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pillow = "^10.1.0"
+opencv-python = "^4.8.1"
+pytesseract = "^0.3.10"
+easyocr = "^1.7.1"
+pdf2image = "^1.16.3"
+ebooklib = "^0.18"
+colorlog = "^6.8.0"
+imutils = "^0.5.4"
+pyyaml = "^6.0.1"
+google-generativeai = "^0.3.2"
+openai = "^1.6.1"
+anthropic = "^0.8.1"
+tenacity = "^8.2.3"
+tqdm = "^4.66.1"
+pydantic = "^2.5.3"
+pydantic-settings = "^2.1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-cov = "^4.1.0"
+pytest-mock = "^3.12.0"
+black = "^23.12.1"
+ruff = "^0.1.9"
+mypy = "^1.8.0"
+pre-commit = "^3.6.0"
+ipython = "^8.19.0"
+reportlab = "^4.0.8"  # Pour générer des PDFs de test
+
+[tool.poetry.scripts]
+pdf2epub = "pdf2epub.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2.*",
+    "pytesseract.*",
+    "easyocr.*",
+    "imutils.*",
+    "ebooklib.*",
+    "pdf2image.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --cov=pdf2epub --cov-report=term-missing --cov-report=html"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]

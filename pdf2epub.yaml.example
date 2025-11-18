@@ -1,0 +1,62 @@
+# Example configuration file for pdf2epub
+# Copy this to pdf2epub.yaml and customize as needed
+
+# OCR Configuration
+ocr:
+  engine: tesseract  # tesseract or easyocr
+  language: fra      # Language code: fra (French), eng (English)
+  tesseract_dir: null  # Path to tesseract data directory (or use TESSDATA_PREFIX env var)
+  confidence_threshold: 80  # Minimum OCR confidence score (0-100)
+
+# Chapter Detection
+chapter_detection:
+  enabled: true  # Automatically detect chapters
+  threshold_percentage: 25  # % of page height from top for chapter detection
+  detect_only_on_header: false  # Only detect chapters with "Chapitre" keyword
+  min_chapter_text_length: 1
+  max_chapter_text_length: 100
+
+# Image Processing
+image_processing:
+  dpi: 200  # DPI for PDF conversion
+  x_margin: 30  # X-axis margin for page-dewarp
+  y_margin: 50  # Y-axis margin for page-dewarp
+  gaussian_blur_kernel: [5, 5]
+  use_page_dewarp: true  # Use external page-dewarp tool
+
+# Text Processing
+text_processing:
+  fix_hyphenation: true  # Fix word breaks across lines
+  fix_dialogs: true      # Indent dialog lines
+  fix_lettrine: true     # Fix dropped capital letters
+  remove_blank_lines: true
+  custom_filters: []  # List of custom regex patterns to remove
+
+# AI Proofreading (EXPERIMENTAL)
+# Requires API key set in environment or config
+ai_proofreading:
+  enabled: false  # Enable AI-powered text correction
+  provider: gemini  # gemini, openai, or claude
+  model: gemini-1.5-flash  # Model to use
+  api_key: null  # API key (or use environment variable)
+  chunk_size: 50000  # Characters per request
+  max_retries: 3
+  timeout: 60
+
+# Performance
+performance:
+  parallel_processing: true  # Process pages in parallel
+  max_workers: null  # Max threads (null = auto-detect)
+  enable_resume: true  # Resume on error with checkpoints
+  checkpoint_interval: 10  # Save progress every N pages
+
+# Output
+output:
+  include_cover: true  # Include cover image in EPUB
+  output_directory: null  # Custom output directory (null = same as input)
+  keep_intermediate_files: false  # Keep temp files after conversion
+  temp_directory: ./tmp
+
+# Logging
+debug: false
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR

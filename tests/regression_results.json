@@ -1,0 +1,107 @@
+[
+  {
+    "test": "default_with_cover",
+    "pdf": "ext_cigales.pdf",
+    "status": "failed",
+    "metrics": {
+      "return_code": 1,
+      "epub_exists": true,
+      "txt_exists": true,
+      "epub_size": 7204,
+      "txt_lines": 86,
+      "txt_words": 546,
+      "chapters": 2,
+      "stderr": "/usr/bin/python3: Error while finding module specification for 'pdf2epub.cli' (ModuleNotFoundError: __path__ attribute not found on 'pdf2epub' while trying to find 'pdf2epub.cli')\n"
+    }
+  },
+  {
+    "test": "no_cover_with_chapters",
+    "pdf": "ext_cigales.pdf",
+    "status": "failed",
+    "metrics": {
+      "return_code": 1,
+      "epub_exists": false,
+      "txt_exists": false,
+      "epub_size": 0,
+      "txt_lines": 0,
+      "txt_words": 0,
+      "chapters": 0,
+      "stderr": "/usr/bin/python3: Error while finding module specification for 'pdf2epub.cli' (ModuleNotFoundError: __path__ attribute not found on 'pdf2epub' while trying to find 'pdf2epub.cli')\n"
+    }
+  },
+  {
+    "test": "with_cover_no_chapters",
+    "pdf": "ext_cigales.pdf",
+    "status": "failed",
+    "metrics": {
+      "return_code": 1,
+      "epub_exists": false,
+      "txt_exists": false,
+      "epub_size": 0,
+      "txt_lines": 0,
+      "txt_words": 0,
+      "chapters": 0,
+      "stderr": "/usr/bin/python3: Error while finding module specification for 'pdf2epub.cli' (ModuleNotFoundError: __path__ attribute not found on 'pdf2epub' while trying to find 'pdf2epub.cli')\n"
+    }
+  },
+  {
+    "test": "sequential_processing",
+    "pdf": "ext_cigales.pdf",
+    "status": "failed",
+    "metrics": {
+      "return_code": 1,
+      "epub_exists": false,
+      "txt_exists": false,
+      "epub_size": 0,
+      "txt_lines": 0,
+      "txt_words": 0,
+      "chapters": 0,
+      "stderr": "/usr/bin/python3: Error while finding module specification for 'pdf2epub.cli' (ModuleNotFoundError: __path__ attribute not found on 'pdf2epub' while trying to find 'pdf2epub.cli')\n"
+    }
+  },
+  {
+    "test": "longer_pdf_with_chapters",
+    "pdf": "ext_rs.pdf",
+    "status": "failed",
+    "metrics": {
+      "return_code": 1,
+      "epub_exists": true,
+      "txt_exists": true,
+      "epub_size": 411738,
+      "txt_lines": 261,
+      "txt_words": 1824,
+      "chapters": 7,
+      "stderr": "/usr/bin/python3: Error while finding module specification for 'pdf2epub.cli' (ModuleNotFoundError: __path__ attribute not found on 'pdf2epub' while trying to find 'pdf2epub.cli')\n"
+    }
+  },
+  {
+    "test": "custom_margins",
+    "pdf": "ext_2_pour_une.pdf",
+    "status": "failed",
+    "metrics": {
+      "return_code": 1,
+      "epub_exists": true,
+      "txt_exists": true,
+      "epub_size": 30326,
+      "txt_lines": 122,
+      "txt_words": 726,
+      "chapters": 4,
+      "stderr": "/usr/bin/python3: Error while finding module specification for 'pdf2epub.cli' (ModuleNotFoundError: __path__ attribute not found on 'pdf2epub' while trying to find 'pdf2epub.cli')\n"
+    }
+  },
+  {
+    "test": "keyword_only_chapter_detection",
+    "pdf": "ext_rs.pdf",
+    "status": "failed",
+    "metrics": {
+      "return_code": 1,
+      "epub_exists": false,
+      "txt_exists": false,
+      "epub_size": 0,
+      "txt_lines": 0,
+      "txt_words": 0,
+      "chapters": 0,
+      "stderr": "/usr/bin/python3: Error while finding module specification for 'pdf2epub.cli' (ModuleNotFoundError: __path__ attribute not found on 'pdf2epub' while trying to find 'pdf2epub.cli')\n"
+    }
+  }
+]

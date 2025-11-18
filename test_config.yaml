@@ -1,0 +1,51 @@
+# Configuration de test
+ocr:
+  engine: tesseract
+  language: fra
+  tesseract_dir: null
+  confidence_threshold: 80
+
+image_processing:
+  dpi: 200
+  x_margin: 30
+  y_margin: 50
+  gaussian_blur_kernel: [5, 5]
+  use_page_dewarp: true
+
+chapter_detection:
+  enabled: true  # Réactivé
+  threshold_percentage: 25
+  max_position_percentage: 75
+  min_position_tolerance: 0.95
+  detect_only_on_header: false
+
+text_processing:
+  fix_hyphenation: true
+  fix_dialogs: true
+  fix_lettrine: true
+  remove_blank_lines: true
+  custom_filters: []
+
+ai_proofreading:
+  enabled: false
+  provider: gemini
+  model: gemini-1.5-flash
+  api_key: null
+  chunk_size: 50000
+  max_retries: 3
+  timeout: 60
+
+performance:
+  parallel_processing: true
+  max_workers: 4
+  enable_resume: true
+  checkpoint_interval: 10
+
+output:
+  include_cover: false  # Pas de couverture, première page = texte
+  output_directory: null
+  keep_intermediate_files: false
+  temp_directory: ./tmp
+
+debug: false
+log_level: INFO
