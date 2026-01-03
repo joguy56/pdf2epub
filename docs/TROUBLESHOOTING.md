@@ -1,23 +1,23 @@
-# Guide de Dépannage
+# Troubleshooting Guide
 
-## 🔍 Table des Matières
+## 🔍 Table of Contents
 
-1. [Problèmes d'Installation](#problèmes-dinstallation)
-2. [Erreurs OCR](#erreurs-ocr)
-3. [Validation des Chapitres](#validation-des-chapitres)
-4. [Correction IA et Quota](#correction-ia-et-quota)
-5. [Performance et Mémoire](#performance-et-mémoire)
+1. [Installation Issues](#installation-issues)
+2. [OCR Errors](#ocr-errors)
+3. [Chapter Validation](#chapter-validation)
+4. [AI Proofreading and Quota](#ai-proofreading-and-quota)
+5. [Performance and Memory](#performance-and-memory)
 
 ---
 
-## Problèmes d'Installation
+## Installation Issues
 
-### Tesseract non trouvé
+### Tesseract not found
 ```
 Error: tesseract not found
 ```
 
-**Solution :**
+**Solution:**
 ```bash
 # Ubuntu/Debian
 sudo apt-get install tesseract-ocr tesseract-ocr-fra
@@ -25,252 +25,321 @@ sudo apt-get install tesseract-ocr tesseract-ocr-fra
 # macOS
 brew install tesseract tesseract-lang
 
-# Vérifier l'installation
+# Verify installation
 tesseract --version
 ```
 
-### Variable TESSDATA_PREFIX
+### TESSDATA_PREFIX variable
 ```bash
 export TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
 ```
 
-### page-dewarp absent
+### page-dewarp missing
 
-L'outil fonctionne sans, mais la qualité d'image peut être moindre.  
-Installation : https://github.com/mzucker/page_dewarp
+The tool works without it, but image quality may be lower.  
+Installation: https://github.com/mzucker/page_dewarp
 
 ---
 
-## Erreurs OCR
+## OCR Errors
 
-### Faible confiance OCR
+### Low OCR confidence
 
-Si beaucoup de texte est rejeté :
+If too much text is rejected:
 ```yaml
 ocr:
-  confidence_threshold: 60  # Réduire de 80 à 60
+  confidence_threshold: 60  # Reduce from 80 to 60
 ```
 
-### Langue incorrecte
+### Incorrect language
 
 ```bash
-# Vérifier les langues disponibles
+# Check available languages
 tesseract --list-langs
 
-# Installer une langue
-sudo apt-get install tesseract-ocr-eng  # Anglais
-sudo apt-get install tesseract-ocr-deu  # Allemand
+# Install a language
+sudo apt-get install tesseract-ocr-eng  # English
+sudo apt-get install tesseract-ocr-deu  # German
 ```
 
 ---
 
-## Validation des Chapitres
+## Chapter Validation
 
-### ⚠️ Erreurs de Numérotation OCR
+### ⚠️ OCR Numbering Errors
 
-OCR (Tesseract) peut mal lire les numéros de chapitres :
-- `17. TITRE` → `47. TITRE` (1 non reconnu)
-- `20. AUTRE` → `0. AUTRE` (2 manquant)
+OCR (Tesseract) can misread chapter numbers:
+- `17. TITLE` → `47. TITLE` (1 not recognized)
+- `20. OTHER` → `0. OTHER` (2 missing)
 
-### Validation Automatique
+### Automatic Validation
 
-La validation s'exécute automatiquement dans le pipeline :
+Validation runs automatically in the pipeline:
 ```
-✅ Validation runs after OCR, before AI proofreading
-❌ Stops if errors found
-```
-
-**Exemple d'erreur détectée :**
-```
-❌ ERREUR: Saut de numérotation détecté
-   Chapitre 16 → Chapitre 47 (ligne 1234)
-   Chapitre attendu: 17
-   💡 Correction suggérée: Remplacer "47" par "17"
+ Runs after OCR, before AI proofreading
+ Stops if errors found
 ```
 
-### Validation Manuelle
+**Example of detected error:**
+```
+ ERROR: Numbering gap detected
+   Chapter 16 → Chapter 47 (line 1234)
+   Expected chapter: 17
+   💡 Suggested fix: Replace "47" with "17"
+```
+
+### Manual Validation
 
 ```bash
-python3 validate_chapters.py ../livre_tesseract.txt
+python3 validate_chapters.py ../book_tesseract.txt
 ```
 
-### Correction des Erreurs
+### Fixing Errors
 
-1. **Ouvrir le fichier** : `vim livre_tesseract.txt`
-2. **Aller à la ligne** : `:1234` (numéro affiché dans l'erreur)
-3. **Corriger** : `47. Titre` → `17. Titre`
-4. **Sauvegarder** : `:wq`
-5. **Relancer** : `./pdf2epub.sh -i livre.pdf --generate-epub-only`
+1. **Open the file**: `vim book_tesseract.txt`
+2. **Go to line**: `:1234` (number shown in error)
+3. **Correct the number**: `47.` → `17.`
+4. **Save**: `:wq`
+5. **Re-run validation**: `python3 validate_chapters.py ../book_tesseract.txt`
 
-### Pourquoi c'est Important
+### Detailed Example
 
-- ✅ Évite le gaspillage d'appels API IA sur du texte cassé
-- ✅ Assure un EPUB propre avec navigation correcte
-- ✅ Économise 20+ minutes de retraitement
+**Original file (with errors):**
+```
+15. The Discovery
+[text...]
 
-**Documentation complète** : [CHAPTER_VALIDATION.md](CHAPTER_VALIDATION.md)
+47. The Trap        ← ERROR: Should be 17
+[text...]
+
+18. The Escape      ← ERROR: Should be 18 but follows 47
+[text...]
+```
+
+**After correction:**
+```
+15. The Discovery
+[text...]
+
+17. The Trap        ✅ FIXED
+[text...]
+
+18. The Escape      ✅ OK
+[text...]
+```
+
+### Ignoring Known Issues
+
+If you are certain the numbering is correct (non-sequential chapters):
+```yaml
+chapter_detection:
+  validate_numbering: false  # Skip validation
+```
 
 ---
 
-## Correction IA et Quota
+## AI Proofreading and Quota
 
-### 🆓 Plan Gratuit Gemini
+### 🚨 Quota Limit Reached
 
-**Limites :**
-- 15 requêtes/minute (RPM)
-- 1 500 requêtes/jour
-- 1 million tokens/jour
+```
+ QUOTA LIMIT REACHED!
+   Gemini free tier: 15 requests/minute, 1500 requests/day
+   Chunks processed: 12/17
+```
 
-**Configuration par défaut :**
+**Solutions:**
+1. **Wait 24 hours** for quota to reset
+2. **Upgrade to paid plan** (pay-as-you-go)
+3. **Use checkpoints** (see below)
+
+### Checkpoint Files
+
+When quota is reached, a checkpoint is automatically saved:
+```
+gemini_checkpoint_12_of_17.txt
+```
+
+This contains the text processed so far.
+
+**To resume** (manual for now):
+1. Wait 24h for quota to reset
+2. Restart full processing (code will retry failed chunks)
+
+### Rate Limiting (429 Too Many Requests)
+
+```
+google.api_core.exceptions.ResourceExhausted: 429
+```
+
+**Solution:**
 ```yaml
 ai_proofreading:
-  free_tier: true
-  delay_between_chunks: 5  # 5s = 12 req/min < 15 RPM
-  chunk_size: 22000        # Auto-ajusté
+  delay_between_chunks: 10  # Increase from 5 to 10 seconds
 ```
 
-**Temps de traitement** : ~1min 30s pour un livre de 380k chars (17 chunks)
+### Reducing Chunk Count
 
-### Quota Atteint
-
-```
-❌ QUOTA LIMITE ATTEINTE !
-   Plan gratuit Gemini : 15 requêtes/minute, 1500 requêtes/jour
-   Chunks traités : 12/17
-   💡 Solution : Attendre 24h ou passer au plan payant
-   📁 Progression sauvegardée dans : gemini_checkpoint_12_of_17.txt
+Process fewer chunks by increasing size:
+```yaml
+ai_proofreading:
+  chunk_size: 30000  # Instead of 22000 (reduces from 17 to ~13 chunks)
 ```
 
-**Solutions :**
-1. **Attendre 24h** : Le quota se réinitialise
-2. **Plan payant** : 1000+ RPM, ~$0.01-$0.05/livre
-3. **Réduire les chunks** : Augmenter `chunk_size` à 30000 (⚠️ risqué)
+ **Risk**: Output truncation if limit < 8000 tokens.
 
-### Détection Automatique des Limites
+### Invalid API Key
 
-Le système détecte automatiquement votre limite :
 ```
-🔍 Detecting AI output token limit...
-⚠️  Could not detect limit (all tests failed), using conservative default: 8,000 tokens
-📊 Auto-configured chunk_size: 22,400 chars
-Split text into 17 chunks
+google.auth.exceptions.DefaultCredentialsError
 ```
 
-**Avantages :**
-- ✅ S'adapte automatiquement si vous upgradez
-- ✅ Prévient la troncature (perte de chapitres)
-- ✅ Optimise l'usage API selon vos limites
-
-**Documentation technique** : [AI_AUTO_DETECTION.md](AI_AUTO_DETECTION.md)
-
-### Texte Tronqué (Chapitres Manquants)
-
-Si des chapitres manquent après correction IA :
-
+**Solution:**
 ```bash
-# Vérifier l'intégrité
-python3 verify_ai.py livre
+# Check your key
+cat ~/gemini.key
 
-# Si troncature détectée
-# → La détection automatique devrait empêcher cela maintenant
-# Mais vous pouvez forcer des chunks plus petits :
-vim pdf2epub.yaml
-# chunk_size: 20000
-
-# Relancer la correction IA uniquement
-./pdf2epub.sh -i livre.pdf --generate-epub-only --ai-proofread
-```
-
-### RetryError / Erreurs Réseau
-
-```
-RetryError[<Future raised AIProofreaderError>]
-```
-
-**Causes possibles :**
-- Rate limiting (trop rapide) → augmentez `delay_between_chunks`
-- Quota quotidien atteint → attendez 24h
-- Problème réseau → vérifiez connectivité
-- Clé API invalide → vérifiez `~/gemini.key`
-
-**Test manuel :**
-```bash
-python3 test_ai_detection.py
-```
-
-### Clé API Non Trouvée
-
-```
-AIProofreaderError: API key not configured for gemini
-```
-
-**Solution :**
-```bash
-# Créer ~/gemini.key
-echo "votre-clé-api" > ~/gemini.key
-chmod 600 ~/gemini.key
-
-# Ou variable d'environnement
-export GEMINI_API_KEY="votre-clé-api"
+# Test manually
+python3 -c "
+import google.generativeai as genai
+genai.configure(api_key=open('~/gemini.key').read().strip())
+model = genai.GenerativeModel('gemini-2.0-flash-exp')
+print(model.generate_content('Hello').text)
+"
 ```
 
 ---
 
-## Performance et Mémoire
+## Performance and Memory
 
-### Out of Memory (OOM)
+### Processing is very slow
 
-Pour les très gros livres (500+ pages) :
+**Possible causes:**
+1. **Free tier delays**: 5s between chunks is normal  
+   → See [GEMINI_FREE_TIER.md](GEMINI_FREE_TIER.md)
 
+2. **Large PDF**: Many pages = more OCR time  
+   → Normal behavior
+
+3. **Low CPU**: OCR is CPU-intensive  
+   → Use better hardware or reduce DPI
+
+### Memory errors
+
+```
+MemoryError: Unable to allocate array
+```
+
+**Solutions:**
+1. **Reduce DPI**:
+   ```yaml
+   pdf:
+     dpi: 200  # Instead of 300
+   ```
+
+2. **Process in batches**: Split PDF into smaller files
+
+3. **Increase system memory**: Close other applications
+
+### Disk space issues
+
+```
+OSError: [Errno 28] No space left on device
+```
+
+**Solution:**
 ```bash
-# Réduire le nombre de workers parallèles
-./pdf2epub.sh -i gros-livre.pdf --max-workers 2
+# Check disk space
+df -h
 
-# Ou en config
-vim pdf2epub.yaml
-# performance:
-#   max_workers: 2
-```
-
-### Traitement Lent
-
-```yaml
-performance:
-  parallel_processing: true  # Activer le parallélisme
-  max_workers: null          # Auto (nombre de CPUs)
-```
-
-### Disque Plein
-
-Les fichiers temporaires sont dans `./tmp/` :
-
-```bash
-# Nettoyer manuellement si besoin
-rm -rf tmp/
-
-# Ou configurer auto-cleanup
-vim pdf2epub.yaml
-# output:
-#   keep_intermediate_files: false
-```
-
-### Ordre des Pages Mélangé
-
-Le traitement parallèle préserve l'ordre (indexation correcte).  
-Si problème détecté :
-
-```yaml
-performance:
-  parallel_processing: false  # Désactiver
+# Clean temporary files
+rm -rf /tmp/pdf2epub_*
 ```
 
 ---
 
-## Documentation Complète
+## Common Workflow Issues
 
-- **README.md** - Guide principal
-- **QUICKSTART.md** - Démarrage rapide
-- **GEMINI_FREE_TIER.md** - Plan gratuit détaillé
-- **AI_AUTO_DETECTION.md** - Détection automatique
-- **CHAPTER_VALIDATION.md** - Validation chapitres
-- **CHANGELOG.md** - Historique des versions
+### EPUB file is empty or corrupted
+
+**Checks:**
+1. Verify OCR output exists: `ls -lh *_tesseract.txt`
+2. Check file size > 0
+3. Validate text encoding (UTF-8)
+4. Re-run with `--verbose` flag
+
+### Chapter titles not detected
+
+```yaml
+chapter_detection:
+  use_ai: true              # Enable AI detection
+  validate_numbering: true  # Enable validation
+```
+
+**Check pattern:**
+```python
+# In chapter_detector.py
+pattern = r'^\s*(\d+)\.\s+(.+)$'  # Matches "17. Title"
+```
+
+### AI proofreading skips chapters
+
+**Check logs:**
+```
+  Chunk 5 failed, retrying...
+ Chunk 5 failed after 3 retries
+```
+
+**Solutions:**
+1. Increase retries:
+   ```yaml
+   ai_proofreading:
+     max_retries: 5  # Instead of 3
+   ```
+
+2. Increase timeout:
+   ```yaml
+   ai_proofreading:
+     timeout: 120  # Instead of 60 seconds
+   ```
+
+---
+
+## Debug Mode
+
+Enable verbose logging:
+```bash
+./pdf2epub.sh -i book.pdf -a "Author" -t "Title" --verbose
+```
+
+Or in Python:
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+---
+
+## Getting Help
+
+If problems persist:
+1. Check [GitHub Issues](https://github.com/joguy56/pdf2epub/issues)
+2. Create new issue with:
+   - Command used
+   - Full error message
+   - OS and Python version
+   - `pdf2epub.yaml` configuration
+
+---
+
+## Quick Fixes Summary
+
+| Problem | Quick Fix |
+|---------|-----------|
+| Tesseract not found | `sudo apt-get install tesseract-ocr` |
+| Low OCR quality | Lower `confidence_threshold` to 60 |
+| Quota reached | Wait 24h or increase `delay_between_chunks` |
+| Slow processing | Normal with free tier (5s delays) |
+| Chapter errors | Run `validate_chapters.py` and fix manually |
+| Memory errors | Reduce DPI to 200 |
+| Invalid API key | Check `~/gemini.key` file exists |

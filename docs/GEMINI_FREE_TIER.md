@@ -1,154 +1,155 @@
-# Configuration pour le Plan Gratuit Gemini
+# Gemini Free Tier Configuration
 
-## Limites du Plan Gratuit
+## Free Tier Limits
 
-Le plan gratuit de Gemini AI a des limites strictes :
+Gemini AI free tier has strict limits:
 
-- **15 requêtes par minute** (RPM)
-- **1 500 requêtes par jour**
-- **1 million de tokens par jour**
-- **Limite de sortie : 8 192 tokens** par requête
+- **15 requests per minute** (RPM)
+- **1,500 requests per day**
+- **1 million tokens per day**
+- **Output limit: 8,192 tokens** per request
 
-## Configuration Recommandée
+## Recommended Configuration
 
-### Dans `pdf2epub.yaml` :
+### In `pdf2epub.yaml`:
 
 ```yaml
 ai_proofreading:
   enabled: true
   provider: gemini
-  model: gemini-2.5-flash  # Ou gemini-1.5-flash
-  free_tier: true          # ✅ IMPORTANT : Active les délais pour plan gratuit
-  delay_between_chunks: 5  # 5 secondes = max 12 chunks/minute (sous 15 RPM)
-  chunk_size: 22000        # Taille sûre pour limite 8k tokens
+  model: gemini-2.5-flash  # Or gemini-1.5-flash
+  free_tier: true          # ✅ IMPORTANT: Enables delays for free tier
+  delay_between_chunks: 5  # 5 seconds = max 12 chunks/minute (under 15 RPM)
+  chunk_size: 22000        # Safe size for 8k token limit
   max_retries: 3
   timeout: 60
 ```
 
-### Calcul des Délais
+### Delay Calculation
 
-Pour rester sous la limite de **15 RPM** :
-- **5 secondes** entre chunks = 12 chunks/minute ✅
-- **4 secondes** entre chunks = 15 chunks/minute ⚠️ (risqué)
-- **3 secondes** entre chunks = 20 chunks/minute ❌ (trop rapide)
+To stay under the **15 RPM** limit:
+- **5 seconds** between chunks = 12 chunks/minute ✅
+- **4 seconds** between chunks = 15 chunks/minute ⚠️ (risky)
+- **3 seconds** between chunks = 20 chunks/minute ❌ (too fast)
 
-## Temps de Traitement Estimés
+## Estimated Processing Times
 
-Pour un livre de **~380 000 caractères** (comme RobinHoodT9) :
+For a book of **~380,000 characters** (like RobinHoodT9):
 
-| chunk_size | Nombre chunks | Délai | Temps total |
-|------------|---------------|-------|-------------|
-| 22 000     | 17 chunks     | 5s    | **~1min 30s** |
-| 15 000     | 25 chunks     | 5s    | **~2min 10s** |
-| 10 000     | 38 chunks     | 5s    | **~3min 15s** |
+| chunk_size | Chunk count | Delay | Total time |
+|------------|-------------|-------|------------|
+| 22,000     | 17 chunks   | 5s    | **~1min 30s** |
+| 15,000     | 25 chunks   | 5s    | **~2min 10s** |
+| 10,000     | 38 chunks   | 5s    | **~3min 15s** |
 
-## Gestion du Quota Quotidien
+## Daily Quota Management
 
-### Combien de livres par jour ?
+### How many books per day?
 
-Avec **1 500 requêtes/jour** :
-- Livre de 17 chunks : **~88 livres/jour max**
-- Livre de 25 chunks : **~60 livres/jour max**
+With **1,500 requests/day**:
+- 17-chunk book: **~88 books/day max**
+- 25-chunk book: **~60 books/day max**
 
-### Que se passe-t-il si quota atteint ?
+### What happens when quota is reached?
 
-Le code détecte automatiquement les erreurs de quota :
+The code automatically detects quota errors:
 
 ```
-❌ QUOTA LIMITE ATTEINTE !
-   Plan gratuit Gemini : 15 requêtes/minute, 1500 requêtes/jour
-   Chunks traités : 12/17
-   💡 Solution : Attendre 24h ou passer au plan payant
-   📁 Progression sauvegardée dans : gemini_checkpoint_12_of_17.txt
+ QUOTA LIMIT REACHED!
+   Gemini free tier: 15 requests/minute, 1500 requests/day
+   Chunks processed: 12/17
+   💡 Solution: Wait 24h or upgrade to paid plan
+   📁 Progress saved in: gemini_checkpoint_12_of_17.txt
 ```
 
-Le traitement s'arrête et sauvegarde un **checkpoint** avec le texte déjà traité.
+Processing stops and saves a **checkpoint** with already processed text.
 
-### Reprendre après quota
+### Resume after quota
 
-Actuellement, vous devez :
-1. Attendre 24h pour que le quota se réinitialise
-2. Relancer le traitement complet (le code réessaiera les chunks échoués)
+Currently, you must:
+1. Wait 24h for quota to reset
+2. Restart the full processing (code will retry failed chunks)
 
-## Optimisations Possibles
+## Possible Optimizations
 
-### 1. Réduire le nombre de chunks
+### 1. Reduce chunk count
 
-Augmentez `chunk_size` pour moins de requêtes :
+Increase `chunk_size` for fewer requests:
 ```yaml
-chunk_size: 30000  # Réduit à ~13 chunks au lieu de 17
+chunk_size: 30000  # Reduces to ~13 chunks instead of 17
 ```
 
-⚠️ **Risque** : Si votre limite réelle est < 8000 tokens, vous risquez la troncature.
+ **Risk**: If your actual limit is < 8000 tokens, you risk truncation.
 
-### 2. Traiter seulement certains chapitres
+### 2. Process only certain chapters
 
-Ajoutez des filtres pour ne corriger que les chapitres avec beaucoup d'erreurs.
+Add filters to correct only chapters with many errors.
 
-### 3. Passer au plan payant
+### 3. Upgrade to paid plan
 
-**Pay-as-you-go** :
-- 1000+ RPM (au lieu de 15)
-- Pas de limite quotidienne stricte
-- Coût : ~$0.075 par million de tokens d'entrée, ~$0.30 par million de tokens de sortie
+**Pay-as-you-go**:
+- 1000+ RPM (instead of 15)
+- No strict daily limit
+- Cost: ~$0.075 per million input tokens, ~$0.30 per million output tokens
 
-Pour un livre de 380k chars (~127k tokens) :
-- Coût estimé : **$0.01 - $0.05** par livre
+For a 380k char book (~127k tokens):
+- Estimated cost: **$0.01 - $0.05** per book
 
-## Commandes
+## Commands
 
-### Traitement avec plan gratuit (défaut)
+### Processing with free tier (default)
 
 ```bash
-./pdf2epub.sh -i livre.pdf -a "Auteur" -t "Titre" -l fra --ai-proofread
+./pdf2epub.sh -i book.pdf -a "Author" -t "Title" -l fra --ai-proofread
 ```
 
-### Traitement avec plan payant (si vous upgradez)
+### Processing with paid plan (if you upgrade)
 
-Modifiez `pdf2epub.yaml` :
+Modify `pdf2epub.yaml`:
 ```yaml
 ai_proofreading:
-  free_tier: false
-  delay_between_chunks: 1  # Plus rapide
+  free_tier: false        # Disable strict limits
+  delay_between_chunks: 1 # Faster
 ```
 
-## Détection Automatique
+## Automatic Detection
 
-Le code détecte automatiquement la limite de sortie :
-- Teste avec 4k, 8k, 16k, 32k tokens
-- Si tous les tests échouent → fallback **8 000 tokens** (plan gratuit)
-- Calcule `chunk_size` optimal : `8000 × 3.5 × 0.8 = 22 400 chars`
+The code automatically detects the output limit:
+- Tests with 4k, 8k, 16k, 32k tokens
+- If all tests fail → fallback **8,000 tokens** (free tier)
+- Calculates optimal `chunk_size`: `8000 × 3.5 × 0.8 = 22,400 chars`
 
-Cette détection fonctionne même quand les tests réseau échouent grâce au fallback intelligent.
+This detection works even when network tests fail thanks to intelligent fallback.
 
-## Erreurs Courantes
+## Common Errors
 
 ### `RESOURCE_EXHAUSTED`
 ```
 google.api_core.exceptions.ResourceExhausted: 429 Quota exceeded
 ```
-**Solution** : Attendez 24h ou passez au plan payant.
+**Solution**: Wait 24h or upgrade to paid plan.
 
 ### `RetryError`
 ```
 RetryError[<Future raised AIProofreaderError>]
 ```
-**Causes possibles** :
-- Quota RPM atteint (trop de requêtes/minute) → augmentez `delay_between_chunks`
-- Quota quotidien atteint → attendez 24h
-- Problème réseau → réessayez
+**Possible causes**:
+- RPM quota reached (too many requests/minute) → increase `delay_between_chunks`
+- Daily quota reached → wait 24h
+- Network problem → retry
+- Invalid API key → check `~/gemini.key`
 
-### Tous les chunks échouent
-**Solution** :
-1. Vérifiez votre clé API : `cat ~/gemini.key`
-2. Testez manuellement : `python3 test_ai_detection.py`
-3. Augmentez `delay_between_chunks` à 10 secondes
+### All chunks fail
+**Solution**:
+1. Check your API key: `cat ~/gemini.key`
+2. Test manually: `python3 test_ai_detection.py`
+3. Increase `delay_between_chunks` to 10 seconds
 
 ## Monitoring
 
-Surveillez les logs pour voir les délais :
+Watch logs for delays:
 ```
 INFO - Waiting 5s before next chunk to avoid rate limiting (free tier: 15 RPM)...
 ```
 
-Si vous voyez beaucoup d'erreurs, augmentez le délai.
+If you see many errors, increase the delay.
