@@ -37,9 +37,14 @@ text_processing:
 ai_proofreading:
   enabled: false  # Enable AI-powered text correction
   provider: gemini  # gemini, openai, or claude
-  model: gemini-1.5-flash  # Model to use
+  model: gemini-2.5-flash  # Model to use (gemini-2.5-flash recommended)
   api_key: null  # API key (or use environment variable)
-  chunk_size: 50000  # Characters per request
+  
+  # Plan gratuit Gemini (15 RPM, 1500/jour) - voir GEMINI_FREE_TIER.md
+  free_tier: true  # Active les délais pour plan gratuit
+  delay_between_chunks: 5  # Délai entre chunks (5s pour rester sous 15 RPM)
+  
+  chunk_size: 22000  # Auto-ajusté selon limites détectées (défaut sûr pour Gemini 8k)
   max_retries: 3
   timeout: 60
 

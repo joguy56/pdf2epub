@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from pdf2epub.ai_proofreader import create_proofreader
 from pdf2epub.chapter_detector import ChapterDetector
+from pdf2epub.chapter_validator import ChapterValidator
 from pdf2epub.config import Pdf2EpubConfig
 from pdf2epub.epub_generator import EPUBGenerator
 from pdf2epub.ocr import EasyOCREngine, TesseractOCR
@@ -137,12 +138,19 @@ class ConversionPipeline:
                 text = self._load_existing_text(pdf_path)
             
             # Stage 3: Text processing
-            text = self._stage_text_processing(text)
-            self._save_checkpoint("text_processed", 0)
+            if not skip_ocr:
+                text = self._stage_text_processing(text)
+                self._save_checkpoint("text_processed", 0)
+                
+                # Save processed text to file
+                text_file = pdf_path.parent / f"{get_file_base_name(pdf_path)}_tesseract.txt"
+                with open(text_file, "w", encoding="utf-8") as f:
+                    f.write(text)
+                logger.info(f"✅ Saved post-processed text: {len(text.split())} words")
             
             # Stage 4: AI proofreading (optional)
             if self.ai_proofreader:
-                text = self._stage_ai_proofreading(text)
+                text = self._stage_ai_proofreading(text, pdf_path)
             
             # Stage 5: EPUB generation
             epub_path = self._stage_epub_generation(text, pdf_path, title, author)
@@ -215,12 +223,8 @@ class ConversionPipeline:
         # Combine results
         full_text = self._combine_ocr_results(ocr_results)
         
-        # Save intermediate text file
-        text_file = pdf_path.parent / f"{get_file_base_name(pdf_path)}_{self.config.ocr.engine}.txt"
-        with open(text_file, "w", encoding="utf-8") as f:
-            f.write(full_text)
-        
-        logger.info(f"✅ OCR complete: {len(ocr_results)} pages, saved to {text_file}")
+        word_count = len(full_text.split())
+        logger.info(f"✅ OCR complete: {len(ocr_results)} pages, {word_count} words")
         return full_text
     
     def _process_pages_sequential(
@@ -228,18 +232,25 @@ class ConversionPipeline:
         page_images: list[PageImage],
         title: str
     ) -> list[str]:
-        """Process pages sequentially."""
+        """Process pages sequentially in order."""
         results = []
         
+        # Get cover OCR mode from config
+        cover_ocr_mode = getattr(self.config, '_cover_ocr_mode', 'include')
+        
         with tqdm(total=len(page_images), desc="OCR Progress") as pbar:
-            for page_img in page_images:
-                if page_img.is_cover:
+            for idx, page_img in enumerate(page_images):
+                # Skip cover if mode is "skip"
+                if page_img.is_cover and cover_ocr_mode == "skip":
+                    logger.info(f"⏭️  Skipping OCR on cover page (used as image only)")
+                    pbar.update(1)
                     continue
                 
-                page_text = self._process_single_page(page_img, title)
+                page_text = self._process_single_page(page_img, title, idx + 1)
                 results.append(page_text)
                 pbar.update(1)
         
+        logger.info(f"📄 Processed {len(results)} pages sequentially")
         return results
     
     def _process_pages_parallel(
@@ -247,16 +258,29 @@ class ConversionPipeline:
         page_images: list[PageImage],
         title: str
     ) -> list[str]:
-        """Process pages in parallel."""
-        # Filter out cover pages and create new indexed list
-        pages_to_process = [(idx, page_img) for idx, page_img in enumerate(page_images) if not page_img.is_cover]
+        """
+        Process pages in parallel while preserving page order.
+        Uses indexed results to guarantee output order matches input order.
+        """
+        # Get cover OCR mode from config
+        cover_ocr_mode = getattr(self.config, '_cover_ocr_mode', 'include')
+        
+        # Filter pages based on cover mode
+        pages_to_process = []
+        for idx, page_img in enumerate(page_images):
+            if page_img.is_cover and cover_ocr_mode == "skip":
+                logger.info(f"⏭️  Skipping OCR on cover page (used as image only)")
+                continue
+            pages_to_process.append((idx, page_img))
+        
         results = [None] * len(pages_to_process)
         
         max_workers = self.config.performance.max_workers
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit all tasks with their index
             futures = {
-                executor.submit(self._process_single_page, page_img, title): new_idx
+                executor.submit(self._process_single_page, page_img, title, orig_idx + 1): new_idx
                 for new_idx, (orig_idx, page_img) in enumerate(pages_to_process)
             }
             
@@ -266,15 +290,38 @@ class ConversionPipeline:
                     try:
                         page_text = future.result()
                         results[idx] = page_text
+                        # Log with page number for clarity
+                        logger.debug(f"Completed page {idx + 1}/{len(results)}")
                     except Exception as e:
                         logger.error(f"Failed to process page {idx + 1}: {e}")
                         results[idx] = ""
                     pbar.update(1)
         
-        return [r for r in results if r is not None]
+        # Verify all pages were processed
+        if None in results:
+            missing = [i + 1 for i, r in enumerate(results) if r is None]
+            logger.warning(f"⚠️  Missing results for pages: {missing}")
+        
+        # Return results in correct order (filter None values)
+        ordered_results = [r for r in results if r is not None]
+        logger.info(f"📄 Processed {len(ordered_results)} pages in correct order")
+        return ordered_results
     
-    def _process_single_page(self, page_img: PageImage, title: str) -> str:
-        """Process a single page with OCR and chapter detection."""
+    def _process_single_page(self, page_img: PageImage, title: str, page_num: Optional[int] = None) -> str:
+        """
+        Process a single page with OCR and chapter detection.
+        
+        Args:
+            page_img: Page image to process
+            title: Book title for junk filtering
+            page_num: Optional page number for logging
+        
+        Returns:
+            Extracted and formatted text for this page
+        """
+        page_label = f"page {page_num}" if page_num else "page"
+        logger.debug(f"Processing {page_label}: {page_img.file_path.name}")
+        
         # Run OCR
         ocr_result = self.ocr_engine.process_image(page_img.file_path)
         
@@ -285,6 +332,7 @@ class ConversionPipeline:
         page_text = ""
         if chapter:
             page_text += chapter.format_title()
+            logger.debug(f"  → Chapter detected on {page_label}: {chapter.title}")
         
         # Add content (filtered for junk)
         page_text += self._extract_clean_text(ocr_result, title)
@@ -371,16 +419,60 @@ class ConversionPipeline:
         metrics = self.text_processor.validate_text_quality(processed)
         logger.info(f"Text metrics: {metrics}")
         
+        # ⚠️ CRITICAL: Validate chapter numbering for OCR errors
+        logger.info("🔍 Validating chapter numbering...")
+        validator = ChapterValidator()
+        errors, warnings = validator.validate_file_from_text(processed)
+        
+        if errors or warnings:
+            validator.print_report()
+            
+            if errors:
+                logger.error("❌ CRITICAL: Chapter validation found errors!")
+                logger.error("   OCR likely misread chapter numbers (e.g., 17→47, 20→0)")
+                logger.error("   These MUST be fixed before AI proofreading to avoid wasted API calls.")
+                logger.error("   Please review and correct chapter numbers manually.")
+                
+                # Check if we're in batch mode (non-interactive)
+                batch_mode = getattr(self.config, '_batch_mode', False)
+                
+                if batch_mode:
+                    logger.error("   ⚠️  Running in batch mode - continuing anyway")
+                    logger.error("   ⚠️  EPUB may have broken chapter navigation!")
+                else:
+                    # Interactive mode: ask user
+                    try:
+                        user_input = input("\n⚠️  Continue anyway? (yes/no): ").strip().lower()
+                        if user_input not in ['yes', 'y', 'o', 'oui']:
+                            raise PipelineError("Pipeline stopped for chapter validation errors")
+                    except (EOFError, KeyboardInterrupt):
+                        # If input fails (e.g., in non-interactive context), treat as batch mode
+                        logger.error("   ⚠️  Cannot get user input - continuing anyway")
+        else:
+            logger.info("✅ Chapter validation passed - no issues found")
+        
         logger.info("✅ Text processing complete")
         return processed
     
-    def _stage_ai_proofreading(self, text: str) -> str:
+    def _stage_ai_proofreading(self, text: str, pdf_path: Path) -> str:
         """Stage 4: AI proofreading."""
         logger.info("🤖 Stage 4: AI proofreading")
         
+        input_words = len(text.split())
+        logger.info(f"Input: {input_words} words")
+        
         try:
             corrected = self.ai_proofreader.proofread_text(text)
-            logger.info("✅ AI proofreading complete")
+            output_words = len(corrected.split())
+            word_diff = output_words - input_words
+            logger.info(f"Output: {output_words} words ({word_diff:+d} words, {word_diff/input_words*100:+.1f}%)")
+            
+            # Save AI-corrected text to separate file
+            ai_text_file = pdf_path.parent / f"{get_file_base_name(pdf_path)}_tesseract_ai.txt"
+            with open(ai_text_file, "w", encoding="utf-8") as f:
+                f.write(corrected)
+            logger.info(f"✅ AI proofreading complete, saved to {ai_text_file.name}")
+            
             return corrected
         except Exception as e:
             logger.error(f"AI proofreading failed: {e}, using original text")
@@ -395,6 +487,7 @@ class ConversionPipeline:
     ) -> Path:
         """Stage 5: Generate EPUB."""
         logger.info("📚 Stage 5: Generating EPUB")
+        logger.info(f"Input text: {len(text.split())} words")
         
         # Get cover image path
         cover_path = None
@@ -421,13 +514,24 @@ class ConversionPipeline:
     
     def _load_existing_text(self, pdf_path: Path) -> str:
         """Load text from existing intermediate file."""
-        text_file = pdf_path.parent / f"{get_file_base_name(pdf_path)}_{self.config.ocr.engine}.txt"
+        # Prefer AI-corrected text if available
+        ai_text_file = pdf_path.parent / f"{get_file_base_name(pdf_path)}_tesseract_ai.txt"
+        text_file = pdf_path.parent / f"{get_file_base_name(pdf_path)}_tesseract.txt"
         
-        if not text_file.exists():
+        if ai_text_file.exists():
+            logger.info(f"Loading AI-corrected text from {ai_text_file.name}")
+            with open(ai_text_file, "r", encoding="utf-8") as f:
+                text = f.read()
+                logger.info(f"Loaded {len(text.split())} words")
+                return text
+        elif text_file.exists():
+            logger.info(f"Loading post-processed text from {text_file.name}")
+            with open(text_file, "r", encoding="utf-8") as f:
+                text = f.read()
+                logger.info(f"Loaded {len(text.split())} words")
+                return text
+        else:
             raise PipelineError(f"Intermediate text file not found: {text_file}")
-        
-        with open(text_file, "r", encoding="utf-8") as f:
-            return f.read()
     
     def _save_checkpoint(self, stage: str, processed_pages: int) -> None:
         """Save pipeline checkpoint."""

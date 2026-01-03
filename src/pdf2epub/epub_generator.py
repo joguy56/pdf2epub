@@ -8,7 +8,7 @@ from typing import Optional
 
 from ebooklib import epub
 
-from pdf2epub.utils import CHAPTER_MARKER, SECTION_MARKER, get_file_base_name
+from pdf2epub.utils import CHAPTER_MARKER, SECTION_MARKER, FOOTNOTE_MARKER, PAGE_END_MARKER, get_file_base_name
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +88,10 @@ class EPUBGenerator:
             for section_title, section_content in sections.items():
                 # Parse chapters within section
                 chapters = self._parse_chapters(section_content)
+                logger.debug(f"Section '{section_title}': found {len(chapters)} chapters")
                 
                 for chapter_title, chapter_content in chapters.items():
+                    logger.debug(f"  Creating chapter: {chapter_title}")
                     chapter = self._create_chapter(
                         chapter_title,
                         chapter_content,
@@ -150,10 +152,10 @@ class EPUBGenerator:
         # Handle leading content without chapter marker
         if parts and parts[0].strip():
             if not re.match(r'^\s*\n', parts[0]):
-                chapters['Introduction'] = parts.pop(0)
+                chapters['Introduction'] = parts[0]
         
-        # Parse chapter pairs
-        for i in range(0, len(parts), 2):
+        # Parse chapter pairs - start from index 1 (after leading content)
+        for i in range(1, len(parts), 2):
             if i + 1 < len(parts):
                 chapter_title = parts[i].strip()
                 chapter_content = parts[i + 1]
@@ -170,6 +172,8 @@ class EPUBGenerator:
         """Create an EPUB chapter."""
         # Generate file name
         filename = title.replace(' ', '_').replace('?', '').replace('!', '').replace('.', '')
+        if not filename:  # Handle empty titles
+            filename = "chapter"
         filename = f"{filename}.xhtml"
         
         # Create chapter
@@ -182,10 +186,56 @@ class EPUBGenerator:
         html += f'</head><body><h1>{title}</h1>'
         
         # Add paragraphs
-        for line in content.split('\n'):
+        # Skip first empty line and the chapter title line if repeated
+        lines = content.split('\n')
+        start_index = 0
+        
+        # Skip leading empty lines and markers
+        while start_index < len(lines):
+            line_stripped = lines[start_index].strip()
+            if not line_stripped or line_stripped in (PAGE_END_MARKER, FOOTNOTE_MARKER):
+                start_index += 1
+            else:
+                break
+        
+        # Remove title from content if it appears at the start
+        # The title might be on its own line or fused with the first paragraph
+        logger.debug(f"    Title to skip: '{title}'")
+        logger.debug(f"    Total lines in content: {len(lines)}, starting at index {start_index}")
+        
+        if start_index < len(lines):
+            first_line = lines[start_index].strip()
+            
+            # Check if the line starts with the title
+            if first_line == title:
+                # Title is on its own line, skip it
+                start_index += 1
+                logger.debug(f"    ✓ Skipped title on separate line")
+            elif first_line.startswith(title):
+                # Title is fused with text, remove it from the line
+                remaining_text = first_line[len(title):].strip()
+                if remaining_text:
+                    # Replace the line with just the remaining text
+                    lines[start_index] = remaining_text
+                    logger.debug(f"    ✓ Removed title prefix, kept: '{remaining_text[:50]}...'")
+                else:
+                    # Line only contained the title, skip it
+                    start_index += 1
+                    logger.debug(f"    ✓ Skipped title-only line")
+        
+        logger.debug(f"    Generating paragraphs from index {start_index} to {len(lines)}")
+        
+        para_count = 0
+        for line in lines[start_index:]:
             line = line.strip()
-            if line:
+            # Skip page end markers (§), footnote markers (~~~) and empty lines
+            if line and line not in (PAGE_END_MARKER, FOOTNOTE_MARKER):
                 html += f'<p>{line}</p>'
+                para_count += 1
+        
+        # Debug log
+        p_count = html.count('<p>')
+        logger.debug(f"    Generated {p_count} paragraphs (loop counted {para_count}) for chapter '{title}'")
         
         html += '</body></html>'
         chapter.content = html

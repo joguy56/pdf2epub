@@ -1,6 +1,42 @@
-*._*
-*.txt
-.gitignore
-*.png
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# OCR output and test files
+*.epub
 *.pdf
-tmp
+*.txt
+*.hocr
+*.jpg
+*.png
+!docs/*.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+tmp/
+main
+gemini.key
+
+# Keep examples
+!*.example
+!test_*.py
+!validate_*.py
+!verify_*.py

@@ -66,6 +66,12 @@ class TextProcessor:
             r"(\n1\..*?" + re.escape(PAGE_END_MARKER) + r")",
             flags=re.DOTALL
         )
+        
+        # Dialogue underscore (OCR error for hyphen)
+        self.pattern_dialog_underscore = re.compile(
+            r'^_([A-ZÀÂÄÆÇÈÉÊËÌÎÏÑÒÔÖÙÛÜŸŒ])',
+            flags=re.MULTILINE
+        )
     
     def process_text(self, text: str | list[str]) -> str:
         """
@@ -145,6 +151,9 @@ class TextProcessor:
             except re.error as e:
                 logger.warning(f"Invalid filter pattern '{filter_pattern}': {e}")
         
+        # Fix dialogue underscore (OCR error for hyphen)
+        text = self.pattern_dialog_underscore.sub(r'- \1', text)
+        
         # Fix common OCR errors
         text = self._fix_common_ocr_errors(text)
         
@@ -168,6 +177,9 @@ class TextProcessor:
         
         # Remove page end markers
         text = text.replace(PAGE_END_MARKER, '')
+        
+        # Remove junk lines (isolated short lines after chapter markers)
+        text = self._filter_junk_lines(text)
         
         # Fix word concatenation across pages
         text = self.pattern_concat_lines.sub(r"\1 \2", text)
@@ -202,6 +214,47 @@ class TextProcessor:
             text = text.replace(wrong, correct)
         
         return text
+    
+    def _filter_junk_lines(self, text: str) -> str:
+        """
+        Remove junk lines (OCR artifacts from decorative images).
+        Filters out isolated short lines (< 3 chars) that appear
+        after chapter/section markers.
+        
+        Args:
+            text: Input text
+            
+        Returns:
+            Text with junk lines removed
+        """
+        from pdf2epub.utils import CHAPTER_MARKER, SECTION_MARKER
+        
+        lines = text.split('\n')
+        filtered_lines = []
+        in_junk_zone = False  # True right after a chapter/section marker
+        
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            
+            # Detect chapter/section markers
+            if CHAPTER_MARKER in stripped or SECTION_MARKER in stripped:
+                filtered_lines.append(line)
+                in_junk_zone = True
+                continue
+            
+            # Filter short isolated lines in junk zone
+            if in_junk_zone and len(stripped) < 3 and stripped:
+                # Skip this junk line
+                logger.debug(f"Filtered junk line: '{stripped}'")
+                continue
+            
+            # Exit junk zone when we hit substantial content
+            if in_junk_zone and len(stripped) >= 10:
+                in_junk_zone = False
+            
+            filtered_lines.append(line)
+        
+        return '\n'.join(filtered_lines)
     
     def extract_structure(self, text: str) -> dict[str, list[str]]:
         """

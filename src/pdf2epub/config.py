@@ -9,6 +9,8 @@ import yaml
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .file_picker import pick_pdf_interactive
+
 
 class OCRConfig(BaseSettings):
     """OCR engine configuration."""
@@ -68,9 +70,11 @@ class AIProofreadingConfig(BaseSettings):
     provider: str = Field(default="gemini", description="AI provider: gemini, openai, claude")
     model: str = Field(default="gemini-1.5-flash", description="Model name")
     api_key: Optional[str] = Field(default=None, description="API key (or use env var)")
-    chunk_size: int = Field(default=50000, description="Text chunk size in characters")
+    chunk_size: int = Field(default=22000, description="Text chunk size in characters (safe for Gemini 8k limit, auto-adjusted if higher limits detected)")
     max_retries: int = Field(default=3, description="Maximum retry attempts")
     timeout: int = Field(default=60, description="Request timeout in seconds")
+    free_tier: bool = Field(default=True, description="Use free tier limits (15 RPM, slower processing)")
+    delay_between_chunks: int = Field(default=5, description="Delay in seconds between chunks (default 5s for free tier 15 RPM)")
     
     @field_validator("provider")
     @classmethod
@@ -196,6 +200,286 @@ class Pdf2EpubConfig(BaseSettings):
             yaml.dump(self.model_dump(), f, default_flow_style=False, sort_keys=False)
 
 
+def interactive_config_full(config: "Pdf2EpubConfig", pdf_path: Optional[str] = None) -> tuple["Pdf2EpubConfig", dict[str, Any]]:
+    """
+    Mode interactif complet avec interface utilisateur améliorée.
+    Demande TOUTES les informations nécessaires pour la conversion.
+    
+    Args:
+        config: Configuration actuelle
+        pdf_path: Chemin du fichier PDF (optionnel, demandé si non fourni)
+    
+    Returns:
+        Tuple (config mise à jour, métadonnées du livre incluant pdf_path)
+    """
+    # Welcome header
+    print("\n" + "═" * 75)
+    print(f"{'📚 INTERACTIVE CONFIGURATION - pdf2epub':^75}")
+    print("═" * 75 + "\n")
+    
+    metadata = {}
+    
+    # 0. PDF FILE (if not provided)
+    if not pdf_path:
+        print("📂 PDF FILE TO CONVERT")
+        print("─" * 75)
+        pdf_path = pick_pdf_interactive()
+        metadata['pdf_path'] = pdf_path
+        print()
+    else:
+        metadata['pdf_path'] = pdf_path
+    
+    pdf_name = Path(pdf_path).stem
+    print(f"📄 File: {pdf_name}.pdf\n")
+    
+    # 1. BOOK TITLE
+    print("📖 BOOK TITLE")
+    print("─" * 75)
+    title = input(f"Title [{pdf_name}]: ").strip() or pdf_name
+    metadata['title'] = title
+    print()
+    
+    # 2. AUTHOR
+    print("✍️  AUTHOR")
+    print("─" * 75)
+    author = input("Author: ").strip()
+    metadata['author'] = author
+    print()
+    
+    # 3. LANGUAGE
+    print("🌍 DOCUMENT LANGUAGE")
+    print("─" * 75)
+    print("Available languages:")
+    print("  fra - Français")
+    print("  eng - English")
+    print("  deu - Deutsch")
+    print("  spa - Español")
+    print("  ita - Italiano")
+    print("  (or other ISO 639-3 code)")
+    lang = input(f"\nLanguage [{config.ocr.language}]: ").strip() or config.ocr.language
+    config.ocr.language = lang
+    metadata['language'] = lang
+    print()
+    
+    # 4. COVER PAGE
+    print("📕 FIRST PAGE (COVER)")
+    print("─" * 75)
+    print("How to handle the first page?")
+    print("  1. Extract cover image + OCR (recommended)")
+    print("  2. Cover image only (no OCR on page 1)")
+    print("  3. Normal page (no cover in EPUB)")
+    while True:
+        cover = input("\nChoice [1/2/3] (default: 1): ").strip() or "1"
+        if cover in ["1", "2", "3"]:
+            if cover == "1":
+                config.output.include_cover = True
+                config._cover_ocr_mode = "include"
+            elif cover == "2":
+                config.output.include_cover = True
+                config._cover_ocr_mode = "skip"
+            else:
+                config.output.include_cover = False
+                config._cover_ocr_mode = "normal"
+            break
+        print("❌ Invalid choice. Use 1, 2 or 3.")
+    print()
+    
+    # 5. CHAPTER DETECTION
+    print("📑 AUTOMATIC CHAPTER DETECTION")
+    print("─" * 75)
+    print("Do you want to automatically detect chapters?")
+    print("  → Detects titles at the top of pages")
+    detect = input("\nEnable? [Y/n]: ").strip().lower()
+    config.chapter_detection.enabled = detect not in ['n', 'no']
+    
+    if config.chapter_detection.enabled:
+        print("\nDetection mode:")
+        print("  → Standard: any text at the top of page")
+        print("  → Strict: only if 'Chapter' keyword is present")
+        strict = input("\nStrict mode? [y/N]: ").strip().lower()
+        config.chapter_detection.detect_only_on_header = strict in ['y', 'yes']
+    print()
+    
+    # 6. AI CORRECTION
+    print("🤖 AI-POWERED PROOFREADING")
+    print("─" * 75)
+    print("Enable AI correction of OCR errors (Gemini)?")
+    print("  ⚠️  Requires Gemini API key")
+    print("  ⚠️  Increases processing time (~2-3 min per chunk)")
+    use_ai = input("\nEnable? [y/N]: ").strip().lower()
+    
+    if use_ai in ['y', 'yes']:
+        config.ai_proofreading.enabled = True
+        
+        # Check API key
+        api_key = config.ai_proofreading.get_api_key()
+        
+        if not api_key:
+            # Search automatically in common locations
+            key_locations = [
+                Path.home() / "gemini.key",
+                Path.home() / ".gemini.key",
+                Path("./gemini.key"),
+            ]
+            
+            found_key = None
+            for key_path in key_locations:
+                if key_path.exists():
+                    try:
+                        with open(key_path) as f:
+                            found_key = f.read().strip()
+                        if found_key:
+                            print(f"\n  ✅ API key found: {key_path}")
+                            config.ai_proofreading.api_key = found_key
+                            break
+                    except Exception as e:
+                        print(f"  ⚠️  Error reading {key_path}: {e}")
+            
+            if not found_key:
+                print("\n  ⚠️  No Gemini API key found automatically")
+                print("  Checked locations:")
+                for loc in key_locations:
+                    print(f"    - {loc}")
+                
+                # Ask for key file path
+                key_file = input("\n  API key file path (or Enter to disable AI): ").strip()
+                
+                if key_file:
+                    key_file_path = Path(key_file).expanduser()
+                    if key_file_path.exists():
+                        try:
+                            with open(key_file_path) as f:
+                                found_key = f.read().strip()
+                            if found_key:
+                                config.ai_proofreading.api_key = found_key
+                                print(f"  ✅ API key loaded from: {key_file_path}")
+                            else:
+                                print("  ❌ Empty file")
+                                config.ai_proofreading.enabled = False
+                        except Exception as e:
+                            print(f"  ❌ Read error: {e}")
+                            config.ai_proofreading.enabled = False
+                    else:
+                        print(f"  ❌ File not found: {key_file_path}")
+                        config.ai_proofreading.enabled = False
+                else:
+                    print("  ℹ️  AI proofreading disabled")
+                    config.ai_proofreading.enabled = False
+    print()
+    
+    # 7. PARALLEL PROCESSING
+    cpu_count = os.cpu_count() or 4
+    print("⚡ PARALLEL PROCESSING")
+    print("─" * 75)
+    print(f"Enable parallel processing? ({cpu_count} CPU cores available)")
+    print("  → Faster but more resource-intensive")
+    print("  → Workers automatically limited to 3 for page-dewarp to avoid timeouts")
+    parallel = input("\nEnable? [Y/n]: ").strip().lower()
+    config.performance.parallel_processing = parallel not in ['n', 'no']
+    print()
+    
+    # Summary
+    print("═" * 75)
+    print("📋 CONFIGURATION SUMMARY")
+    print("═" * 75)
+    print(f"  File:         {Path(pdf_path).name}")
+    print(f"  Title:        {metadata.get('title', 'N/A')}")
+    print(f"  Author:       {metadata.get('author', 'N/A') or '(not specified)'}")
+    print(f"  Language:     {config.ocr.language}")
+    print(f"  Cover:        {'Yes' if config.output.include_cover else 'No'} (mode: {getattr(config, '_cover_ocr_mode', 'N/A')})")
+    print(f"  Chapters:     {'Auto-detect' if config.chapter_detection.enabled else 'Disabled'}")
+    if config.chapter_detection.enabled and config.chapter_detection.detect_only_on_header:
+        print(f"                (strict mode)")
+    print(f"  AI:           {'Yes' if config.ai_proofreading.enabled else 'No'}")
+    print(f"  Parallel:     {'Yes (max 3 workers for dewarp)' if config.performance.parallel_processing else 'No'}")
+    print("═" * 75 + "\n")
+    
+    confirm = input("✅ Start conversion with these settings? [Y/n]: ").strip().lower()
+    if confirm in ['n', 'no']:
+        print("\n❌ Conversion cancelled.\n")
+        exit(0)
+    
+    print()
+    return config, metadata
+
+
+def interactive_config(config: "Pdf2EpubConfig", args: Any) -> "Pdf2EpubConfig":
+    """
+    Mode interactif basique (conservé pour compatibilité).
+    Demande seulement les options manquantes.
+    
+    Args:
+        config: Configuration actuelle
+        args: Arguments de ligne de commande (Namespace)
+    
+    Returns:
+        Configuration mise à jour
+    """
+    # Si --wizard, utiliser le mode complet
+    if hasattr(args, 'wizard') and args.wizard:
+        pdf_path = args.input if hasattr(args, 'input') and args.input else None
+        config, metadata = interactive_config_full(config, pdf_path)
+        
+        # Appliquer les métadonnées aux args
+        if 'pdf_path' in metadata and not args.input:
+            args.input = metadata['pdf_path']
+        if 'title' in metadata and not args.title:
+            args.title = metadata.get('title')
+        if 'author' in metadata and not args.author:
+            args.author = metadata.get('author')
+        if 'language' in metadata and not args.language:
+            args.language = metadata.get('language')
+        
+        return config
+    
+    # Sinon, mode basique (ancien comportement)
+    print("\n" + "="*70)
+    print("   QUICK CONFIGURATION - pdf2epub")
+    print("="*70 + "\n")
+    
+    # Juste les questions pour les flags manquants
+    if not (hasattr(args, 'cover_mode') and args.cover_mode) and not (hasattr(args, 'no_cover') and args.no_cover):
+        while True:
+            print("📖 Cover page handling:")
+            print("  1. Image only (no OCR)")
+            print("  2. OCR + image (recommended)")
+            print("  3. Normal page")
+            choice = input("\nChoice [1/2/3] (default: 2): ").strip() or "2"
+            if choice in ["1", "2", "3"]:
+                if choice == "1":
+                    config.output.include_cover = True
+                    config._cover_ocr_mode = "skip"
+                elif choice == "2":
+                    config.output.include_cover = True
+                    config._cover_ocr_mode = "include"
+                else:
+                    config.output.include_cover = False
+                    config._cover_ocr_mode = "normal"
+                break
+            print("Invalid choice.")
+    
+    if not hasattr(args, 'language') or args.language is None:
+        print("\n🌍 Language: fra (French), eng (English), etc.")
+        lang = input(f"Language [{config.ocr.language}]: ").strip() or config.ocr.language
+        config.ocr.language = lang
+    
+    if not hasattr(args, 'ai_proofread') or not args.ai_proofread:
+        use_ai = input("\n🤖 Enable AI proofreading? [y/N]: ").strip().lower()
+        if use_ai in ['y', 'yes', 'o', 'oui']:
+            config.ai_proofreading.enabled = True
+    
+    if not hasattr(args, 'no_chap_detection') or not args.no_chap_detection:
+        detect = input("\n📑 Enable chapter detection? [Y/n]: ").strip().lower()
+        config.chapter_detection.enabled = detect not in ['n', 'no', 'non']
+    
+    if not hasattr(args, 'no_parallel') or not args.no_parallel:
+        parallel = input("\n⚡ Enable parallel processing? [Y/n]: ").strip().lower()
+        config.performance.parallel_processing = parallel not in ['n', 'no', 'non']
+    
+    print("\n" + "="*70 + "\n")
+    return config
+
+
 def create_default_config_file(output_path: str | Path) -> None:
     """
     Create a default configuration file with comments.
@@ -243,7 +527,7 @@ ai_proofreading:
   provider: gemini  # gemini, openai, or claude
   model: gemini-1.5-flash  # Model to use
   api_key: null  # API key (or use environment variable)
-  chunk_size: 50000  # Characters per request
+  chunk_size: 22000  # Safe for Gemini 8k limit, will auto-increase if higher limits detected
   max_retries: 3
   timeout: 60
 

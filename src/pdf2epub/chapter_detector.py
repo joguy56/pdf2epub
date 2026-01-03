@@ -106,6 +106,12 @@ class ChapterDetector:
                 # (it's just an announcement page)
                 return section, text_on_top, False
             
+            # Check for numbered chapters like "1. TITLE" or "5. TITLE"
+            numbered_chapter = self._detect_numbered_chapter(block, block_text, text_on_top)
+            if numbered_chapter:
+                self.current_chapter_title = numbered_chapter.title
+                return numbered_chapter, True, True
+            
             # Check for chapter with keyword
             if self.config.detect_only_on_header:
                 chapter = self._detect_chapter_with_keyword(block, block_text)
@@ -231,6 +237,12 @@ class ChapterDetector:
         if len(clean_text) < 3:
             return None
         
+        # Check if it looks like a numbered chapter (e.g., "1. TITLE" or "5. TITLE")
+        is_numbered_chapter = re.match(r'^\d+\.\s+[A-ZÀÉÈ]', clean_text)
+        if is_numbered_chapter:
+            # This is a numbered chapter, not a section
+            return None
+        
         # Must be centered (not full width)
         is_centered = (page_width - block.width) > (page_width / 3)
         
@@ -258,6 +270,31 @@ class ChapterDetector:
                 start_page=ocr_result.page_number,
                 start_block_id=block.block_id,
                 is_section=True
+            )
+        
+        return None
+    
+    def _detect_numbered_chapter(
+        self,
+        block: TextBlock,
+        block_text: str,
+        text_on_top: bool
+    ) -> Optional[Chapter]:
+        """Detect numbered chapters like '1. TITLE' or '5. TITLE'."""
+        clean_text = block_text.strip()
+        
+        # Check for pattern like "1. TITLE" or "5. TITLE"
+        # (digit(s), period, space, then uppercase letter)
+        is_numbered = re.match(r'^\d+\.\s+[A-ZÀÉÈ]', clean_text)
+        
+        if is_numbered and not text_on_top and len(clean_text) < 50:
+            title = re.sub(r"[\(\)\[\]\|]", "", clean_text)
+            logger.info(f"Detected numbered chapter: {title}")
+            return Chapter(
+                title=title,
+                start_page=0,  # Will be set by caller
+                start_block_id=block.block_id,
+                is_section=False
             )
         
         return None

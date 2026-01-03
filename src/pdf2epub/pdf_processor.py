@@ -187,7 +187,7 @@ class PDFProcessor:
         logger.info(f"Converted {len(page_images)} images")
         return page_images
     
-    def preprocess_image(self, image_path: Path) -> Path:
+    def preprocess_image(self, image_path: Path) -> bool:
         """
         Apply preprocessing to an image.
         
@@ -201,7 +201,7 @@ class PDFProcessor:
             image_path: Path to image file
             
         Returns:
-            Path to preprocessed image
+            True if successful (including dewarp if enabled), False if dewarp timeout
             
         Raises:
             PDFProcessorError: If preprocessing fails
@@ -226,28 +226,33 @@ class PDFProcessor:
             
             # Apply page dewarping if enabled
             if self.image_config.use_page_dewarp:
-                self._apply_page_dewarp(image_path)
+                return self._apply_page_dewarp(image_path)
             
-            return image_path
+            return True
             
         except Exception as e:
             raise PDFProcessorError(f"Failed to preprocess image {image_path}: {e}") from e
     
-    def _apply_page_dewarp(self, image_path: Path) -> None:
+    def _apply_page_dewarp(self, image_path: Path) -> bool:
         """
         Apply page dewarping using external tool.
         
         Args:
             image_path: Path to image file
+            
+        Returns:
+            True if successful, False if timeout or error
         """
         try:
+            # Faster parameters: reduced flattening, no binary re-thresholding
             cmd = [
                 "page-dewarp",
-                "-oscreen",
+                "-ofile",  # Save to file (not screen)
                 "-d0",
-                "-f", "1.2",
+                "-f", "1.0",  # Reduced flattening factor (1.0 instead of 1.2)
                 f"-x", str(self.image_config.x_margin),
                 f"-y", str(self.image_config.y_margin),
+                "-nb", "1",  # Prevent re-thresholding (keep our preprocessing)
                 image_path.name
             ]
             
@@ -255,7 +260,7 @@ class PDFProcessor:
                 cmd,
                 cwd=self.temp_dir,
                 capture_output=True,
-                timeout=30,
+                timeout=120,  # Increased from 60 to 120 seconds
                 text=True
             )
             
@@ -263,11 +268,28 @@ class PDFProcessor:
                 logger.warning(
                     f"page-dewarp failed for {image_path.name}: {result.stderr}"
                 )
+                return False
+            
+            # page-dewarp creates {filename}_thresh.png, we need to move it back to original
+            # Example: page_001.jpg -> page_001_thresh.png
+            stem = image_path.stem  # page_001
+            dewarped_file = self.temp_dir / f"{stem}_thresh.png"
+            
+            if dewarped_file.exists():
+                # Replace original with dewarped version
+                import shutil
+                shutil.move(str(dewarped_file), str(image_path))
+                return True
+            else:
+                logger.warning(f"page-dewarp did not create expected output: {dewarped_file}")
+                return False
                 
         except subprocess.TimeoutExpired:
             logger.warning(f"page-dewarp timeout for {image_path.name}")
+            return False
         except Exception as e:
             logger.warning(f"page-dewarp error for {image_path.name}: {e}")
+            return False
     
     def process_all_images(
         self,
@@ -276,6 +298,7 @@ class PDFProcessor:
     ) -> list[PageImage]:
         """
         Preprocess all images, optionally in parallel.
+        Retries pages that timed out after initial processing.
         
         Args:
             page_images: List of page images to process
@@ -294,10 +317,15 @@ class PDFProcessor:
                 self.preprocess_image(img.file_path)
             return page_images
         
-        # Parallel processing
-        logger.info(f"Preprocessing {len(images_to_process)} images in parallel")
+        # Parallel processing with limited workers to avoid timeouts
+        # page-dewarp is CPU/memory intensive, use fewer workers
+        import os
+        max_workers = min(3, (os.cpu_count() or 4) // 2)  # Cap at 3 workers for page-dewarp
+        logger.info(f"Preprocessing {len(images_to_process)} images in parallel with {max_workers} workers")
         
-        with ProcessPoolExecutor() as executor:
+        failed_images = []
+        
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(self.preprocess_image, img.file_path): img
                 for img in images_to_process
@@ -306,10 +334,24 @@ class PDFProcessor:
             for future in as_completed(futures):
                 img = futures[future]
                 try:
-                    future.result()
+                    success = future.result()
+                    if not success:
+                        # Page had timeout or error, mark for retry
+                        failed_images.append(img)
                     logger.debug(f"Preprocessed page {img.page_number}")
                 except Exception as e:
                     logger.error(f"Failed to preprocess page {img.page_number}: {e}")
+                    failed_images.append(img)
+        
+        # Retry failed images sequentially
+        if failed_images:
+            logger.info(f"Retrying {len(failed_images)} pages that had timeouts or errors")
+            for img in failed_images:
+                logger.info(f"Retrying page {img.page_number}")
+                try:
+                    self.preprocess_image(img.file_path)
+                except Exception as e:
+                    logger.error(f"Retry failed for page {img.page_number}: {e}")
         
         return page_images
     

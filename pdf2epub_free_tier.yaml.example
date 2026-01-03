@@ -1,0 +1,85 @@
+# Configuration optimisée pour le plan GRATUIT Gemini
+# Copier vers pdf2epub.yaml et ajuster selon vos besoins
+
+# Traitement PDF
+pdf_processing:
+  dpi: 300
+  output_format: JPEG
+  preprocessing: true
+  x_margin: 30
+  y_margin: 50
+
+# OCR
+ocr:
+  engine: tesseract
+  language: fra
+  tesseract_dir: null
+
+# Détection de chapitres
+chapter_detection:
+  enabled: true
+  threshold_pct: 25
+  only_on_header: false
+
+# Post-traitement OCR
+text_processing:
+  fix_hyphens: true
+  fix_accents: true
+  fix_dialogs: true
+  fix_lettrine: true
+  remove_blank_lines: true
+  custom_filters: []
+
+# ⚙️ CONFIGURATION PLAN GRATUIT GEMINI
+ai_proofreading:
+  enabled: true
+  provider: gemini
+  model: gemini-2.5-flash  # Ou gemini-1.5-flash
+  
+  # 🆓 PLAN GRATUIT : Limites strictes
+  free_tier: true                    # Active les délais pour 15 RPM
+  delay_between_chunks: 5            # 5s = 12 chunks/min (sous 15 RPM max)
+  
+  # Tailles optimales pour plan gratuit
+  chunk_size: 22000                  # Sûr pour limite 8k tokens
+  # Alternative plus rapide mais risquée :
+  # chunk_size: 30000                # Réduit à ~13 chunks (RISQUE si limite < 8k)
+  
+  # Retry et timeout
+  max_retries: 3                     # 3 tentatives avant abandon
+  timeout: 60                        # 60s timeout par chunk
+  
+  # Clé API (ou dans variable d'environnement GEMINI_API_KEY)
+  api_key: null  # Laisser null pour utiliser ~/gemini.key ou variable env
+
+# Génération EPUB
+epub:
+  include_cover: true
+  css_custom: null
+
+# ⏱️ ESTIMATION TEMPS DE TRAITEMENT
+# 
+# Livre ~380k caractères (comme RobinHoodT9) :
+# - chunk_size: 22000 → 17 chunks → ~1min 30s (5s × 17)
+# - chunk_size: 30000 → 13 chunks → ~1min 10s (5s × 13)
+#
+# 📊 QUOTA QUOTIDIEN
+# 
+# Plan gratuit : 1500 requêtes/jour
+# - Avec 17 chunks/livre : ~88 livres/jour max
+# - Avec 13 chunks/livre : ~115 livres/jour max
+#
+# 💡 ASTUCE : Si vous atteignez le quota
+# 
+# Le code sauvegarde automatiquement un checkpoint :
+#   gemini_checkpoint_X_of_Y.txt
+# 
+# Attendez 24h pour que le quota se réinitialise.
+
+# 🚀 POUR PASSER AU PLAN PAYANT
+#
+# Modifiez ces paramètres :
+#   free_tier: false
+#   delay_between_chunks: 1  # Plus rapide (1000+ RPM au lieu de 15)
+#
+# Coût estimé : $0.01 - $0.05 par livre (~380k chars)

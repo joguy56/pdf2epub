@@ -34,46 +34,141 @@ A robust, modern Python tool for converting scanned PDF books into high-quality 
 ### Installation
 
 ```bash
-# Clone the repository
 cd pdf2epub-refactored
 
-# Install with Poetry (recommended)
-poetry install
+# Installer les dépendances Python
+pip install -r requirements.txt
 
-# Or with pip
-pip install -e .
+# Vérifier que Tesseract est installé
+tesseract --version
+# Si absent: sudo apt-get install tesseract-ocr tesseract-ocr-fra
+
+# Rendre le script helper exécutable
+chmod +x pdf2epub.sh
 ```
 
-### External Dependencies
+### Utilisation avec le Script Helper (Recommandé)
 
-**Required:**
-- Tesseract OCR: [Installation guide](https://tesseract-ocr.github.io/tessdoc/Installation.html)
-- Poppler (for PDF processing): `apt-get install poppler-utils` (Ubuntu) or `brew install poppler` (macOS)
+Le script `pdf2epub.sh` simplifie l'utilisation en gérant automatiquement PYTHONPATH et la clé Gemini:
 
-**Optional:**
-- page-dewarp: [GitHub](https://github.com/mzucker/page_dewarp) (for better image quality)
-
-### Basic Usage
+**Mode Wizard - Interface Interactive Complète:**
 
 ```bash
-# Simple conversion
-pdf2epub -i book.pdf -a "Author Name" -t "Book Title"
+# Lance l'interface interactive qui demande TOUTES les informations
+./pdf2epub.sh --wizard
 
-# French book with custom settings
-pdf2epub -i livre.pdf -a "Victor Hugo" -t "Les Misérables" -l fra
+# L'outil demande:
+# - Fichier PDF à convertir
+# - Titre du livre
+# - Auteur
+# - Langue
+# - Gestion de la couverture
+# - Détection chapitres
+# - Correction IA
+# - Traitement parallèle
+```
 
-# With AI proofreading (requires API key)
-export GEMINI_API_KEY="your-api-key"
-pdf2epub -i book.pdf -a "Author" --ai-proofread
+**Mode Direct (si vous connaissez les paramètres):**
 
-# Resume from images (skip PDF conversion)
-pdf2epub -i book.pdf --recognize-only
+```bash
+# Créer votre clé Gemini (une seule fois)
+echo "votre-clé-api-gemini" > ~/gemini.key
+chmod 600 ~/gemini.key
 
-# Generate EPUB from existing OCR text
-pdf2epub -i book.pdf --generate-epub-only
+# Utiliser le script
+./pdf2epub.sh -i ../livre.pdf -a "Auteur" -t "Titre"
+
+# Avec IA
+./pdf2epub.sh -i ../livre.pdf -a "Auteur" --ai-proofread --batch
+
+# Toutes les options sont supportées
+./pdf2epub.sh --help
+```
+
+### Utilisation Basique
+
+**Mode Interactif (Recommandé pour débuter):**
+
+```bash
+cd /home/jguyot/pdf2epub/main/pdf2epub-refactored
+
+# L'outil pose des questions essentielles
+PYTHONPATH=src python3 src/pdf2epub/cli.py \
+  -i ../livre.pdf \
+  -a "Nom Auteur" \
+  -t "Titre du Livre"
+```
+
+**Mode Batch (Automatique, sans questions):**
+
+```bash
+# Pour automatiser ou avec valeurs par défaut
+PYTHONPATH=src python3 src/pdf2epub/cli.py \
+  -i ../livre.pdf \
+  -a "Nom Auteur" \
+  -t "Titre du Livre" \
+  --batch
+```
+
+**Avec Correction IA (Gemini):**
+
+```bash
+# Stocker la clé API (une fois)
+echo "votre-clé-gemini" > ~/gemini.key
+chmod 600 ~/gemini.key
+
+# Utiliser avec l'IA
+PYTHONPATH=src GEMINI_API_KEY=$(cat ~/gemini.key) python3 src/pdf2epub/cli.py \
+  -i ../livre.pdf \
+  -a "Auteur" \
+  -t "Titre" \
+  --ai-proofread \
+  --batch
+```
+
+**Exemples Courants:**
+
+```bash
+# Régénérer l'EPUB depuis le texte OCR existant
+PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --generate-epub-only
+
+# Nettoyer les fichiers temporaires
+PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --clean
+
+# Mode debug avec logs détaillés
+PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf -d
 ```
 
 ## 📖 Documentation
+
+### Fichiers Générés
+
+Lors de la conversion, l'outil crée plusieurs fichiers:
+
+```
+livre.pdf                    # Votre PDF source
+livre.epub                   # EPUB généré ✅
+livre_tesseract.txt          # Texte après post-processing (Stage 3)
+livre_tesseract_ai.txt       # Texte après correction IA (Stage 4, si --ai-proofread)
+tmp/                         # Images temporaires (nettoyé automatiquement)
+  cover.jpg                  # Image de couverture extraite
+  page_*.jpg                 # Pages converties en images
+```
+
+**Ordre de priorité pour la génération EPUB:**
+1. Si `livre_tesseract_ai.txt` existe → utilise ce fichier
+2. Sinon, si `livre_tesseract.txt` existe → utilise ce fichier
+3. Sinon, lance le pipeline complet
+
+**Commandes de nettoyage:**
+```bash
+# Supprimer tous les fichiers temporaires
+PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --clean
+
+# Ou manuellement
+rm livre_tesseract*.txt
+rm -rf tmp/
+```
 
 ### Configuration
 
@@ -101,7 +196,10 @@ chapter_detection:
 ai_proofreading:
   enabled: false
   provider: gemini  # gemini, openai, or claude
-  model: gemini-1.5-flash
+  model: gemini-2.5-flash
+  free_tier: true   # Plan gratuit Gemini (15 RPM) - voir GEMINI_FREE_TIER.md
+  delay_between_chunks: 5  # Délai entre chunks (5s pour plan gratuit)
+  chunk_size: 22000  # Auto-ajusté selon limites détectées
   api_key: null  # or set via environment variable
 
 # Performance
@@ -117,49 +215,89 @@ Configuration files are loaded from (in order):
 3. `~/.pdf2epub.yaml`
 4. `/etc/pdf2epub/config.yaml`
 
-### Command-Line Options
+### Options Principales
 
 ```
-Required:
-  -i, --input PATH          Input PDF file
+Requis:
+  -i, --input PATH          Fichier PDF source
 
-Book Metadata:
-  -a, --author TEXT         Book author
-  -t, --title TEXT          Book title (default: filename)
-  -l, --language CODE       Language code (fra, eng, etc.)
+Métadonnées:
+  -a, --author TEXT         Auteur du livre
+  -t, --title TEXT          Titre (défaut: nom du fichier)
+  -l, --language CODE       Code langue (fra, eng, etc.)
 
-OCR Options:
-  -O, --ocr-engine ENGINE   OCR engine: tesseract or easyocr
-  --tesseract-dir PATH      Tesseract data directory
+Couverture:
+  --cover-mode {1,2,3}      1=Image seule, 2=OCR+Image (défaut), 3=Page normale
+  --no-cover                Pas d'image de couverture
 
-Processing Stages:
-  -r, --recognize-only      Skip PDF conversion, start from images
-  -g, --generate-epub-only  Skip OCR, use existing text file
+Stades de traitement:
+  -r, --recognize-only      Partir des images (skip PDF→images)
+  -g, --generate-epub-only  Partir du texte OCR existant (skip tout sauf EPUB)
 
-Chapter Detection:
-  --no-chap-detection       Disable automatic chapter detection
-  --chap-detect-thres-pct N Chapter threshold (% of page height)
-  --detect-only-on-chap-header  Only detect "Chapitre" keyword
+Détection chapitres:
+  --no-chap-detection       Désactiver détection automatique
 
-Image Processing:
-  -x, --x-margin N          X-axis cropping margin (default: 30)
-  -y, --y-margin N          Y-axis cropping margin (default: 50)
-  --no-cover                Don't include cover image
-
-Text Processing:
-  -f, --filter REGEX        Filter pattern (can specify multiple)
-
-AI Proofreading:
-  --ai-proofread            Enable AI text correction
-  --ai-provider PROVIDER    Provider: gemini, openai, claude
+Correction IA:
+  --ai-proofread            Activer correction Gemini
 
 Performance:
-  --no-parallel             Disable parallel processing
-  --max-workers N           Maximum worker threads
+  --max-workers N           Nombre de threads parallèles (défaut: auto)
+  --batch                   Mode automatique (pas de questions)
 
-Debug:
-  -d, --debug               Enable debug logging
-  --keep-temp               Keep temporary files
+Maintenance:
+  --clean                   Supprimer fichiers temporaires
+  -d, --debug               Logs détaillés
+```
+
+**Exemples:**
+
+```bash
+# Conversion basique
+PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf -a "Auteur"
+
+# Avec IA et 4 workers
+PYTHONPATH=src GEMINI_API_KEY=$(cat ~/gemini.key) python3 src/pdf2epub/cli.py \
+  -i livre.pdf -a "Auteur" --ai-proofread --max-workers 4 --batch
+
+# Régénérer EPUB sans refaire OCR
+PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --generate-epub-only
+
+# Nettoyer
+PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --clean
+```
+
+### Cover Page Handling
+
+The first page of your PDF can be handled in three ways:
+
+| Mode | Flag | Description | Use Case |
+|------|------|-------------|----------|
+| **1** | `--cover-mode 1` | Image only (no OCR) | Pure cover image, no text to extract |
+| **2** | `--cover-mode 2` | OCR + Image (default) | Cover with title/author to extract |
+| **3** | `--cover-mode 3` | Normal page | First page is regular content |
+
+**Interactive prompt (if no flag):**
+```
+📖 GESTION DE LA PAGE DE COUVERTURE
+Comment voulez-vous traiter la première page du PDF ?
+  1. Image de couverture uniquement (pas d'OCR)
+  2. OCR + image de couverture (extrait le texte ET utilise comme cover)
+  3. Traiter comme page normale (OCR mais pas de cover dans EPUB)
+Votre choix [1/2/3] (défaut: 2):
+```
+
+**Examples:**
+```bash
+# Cover with text extraction (recommended)
+pdf2epub -i book.pdf --cover-mode 2
+
+# Cover as image only (skip OCR)
+pdf2epub -i book.pdf --cover-mode 1
+
+# No cover image at all
+pdf2epub -i book.pdf --cover-mode 3
+# or
+pdf2epub -i book.pdf --no-cover
 ```
 
 ### AI Proofreading Setup
@@ -353,63 +491,45 @@ Typical performance on a modern laptop (8-core CPU):
 
 ## 🐛 Troubleshooting
 
-### Tesseract Not Found
+**📖 Guide complet : [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**
 
+### Problèmes Courants
+
+**Installation Tesseract**
 ```bash
-# Ubuntu/Debian
-sudo apt-get install tesseract-ocr tesseract-ocr-fra
-
-# macOS
-brew install tesseract tesseract-lang
-
-# Set data directory
-export TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
+sudo apt-get install tesseract-ocr tesseract-ocr-fra  # Ubuntu/Debian
+brew install tesseract tesseract-lang                  # macOS
 ```
 
-### page-dewarp Not Available
+**Validation des Chapitres**
 
-The tool works without it, but image quality may be lower. Install from:
-https://github.com/mzucker/page_dewarp
+OCR peut mal lire les numéros : `17. Titre` → `47. Titre`
 
-### Out of Memory
+La validation automatique détecte ces erreurs. Voir [CHAPTER_VALIDATION.md](docs/CHAPTER_VALIDATION.md).
 
-Reduce parallel workers:
+**Plan Gratuit Gemini**
 
-```bash
-pdf2epub -i large-book.pdf --max-workers 2
-```
+- 15 req/min, 1500 req/jour
+- Délai automatique : 5s entre chunks
+- Temps : ~1min 30s pour 380k chars
 
-### Chapter Detection Issues
+Si quota atteint → checkpoint automatique. Voir [GEMINI_FREE_TIER.md](docs/GEMINI_FREE_TIER.md).
 
-Adjust threshold or disable:
+**Détection Automatique des Limites IA**
 
-```bash
-# Adjust threshold (default 25%)
-pdf2epub -i book.pdf --chap-detect-thres-pct 30
+Le système détecte votre limite de tokens et ajuste automatiquement les chunks.
 
-# Or disable completely
-pdf2epub -i book.pdf --no-chap-detection
-```
+Voir [AI_AUTO_DETECTION.md](docs/AI_AUTO_DETECTION.md) pour détails techniques.
 
-## 📝 Changelog
+---
+## � Documentation
 
-### Version 2.0.0 (Current)
-
-- 🎉 Complete rewrite with modern architecture
-- ✨ Added AI proofreading support (Gemini, OpenAI, Claude)
-- ⚡ Parallel processing with multiprocessing
-- 💾 Error recovery and checkpoints
-- 🧪 Comprehensive test suite
-- 📖 Improved documentation
-- 🔧 YAML configuration files
-- 🏗️ Modular, maintainable codebase
-
-### Version 1.0.0 (Original)
-
-- Basic PDF to EPUB conversion
-- Tesseract OCR support
-- Simple chapter detection
-- Command-line interface
+- **[QUICKSTART.md](docs/QUICKSTART.md)** - Démarrage rapide (5 minutes)
+- **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Guide de dépannage complet
+- **[CHANGELOG.md](docs/CHANGELOG.md)** - Historique des versions
+- **[GEMINI_FREE_TIER.md](docs/GEMINI_FREE_TIER.md)** - Configuration plan gratuit Gemini
+- **[AI_AUTO_DETECTION.md](docs/AI_AUTO_DETECTION.md)** - Détection automatique des limites IA
+- **[CHAPTER_VALIDATION.md](docs/CHAPTER_VALIDATION.md)** - Validation des chapitres OCR
 
 ## 🤝 Contributing
 
