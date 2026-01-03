@@ -132,7 +132,7 @@ PYTHONPATH=src GEMINI_API_KEY=$(cat ~/gemini.key) python3 src/pdf2epub/cli.py \
 # Régénérer l'EPUB depuis le texte OCR existant
 PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --generate-epub-only
 
-# Nettoyer les fichiers temporaires
+# Nettoyer les files temporaires
 PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --clean
 
 # Mode debug avec logs détaillés
@@ -143,7 +143,7 @@ PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf -d
 
 ### Fichiers Générés
 
-Lors de la conversion, l'outil crée plusieurs fichiers:
+Lors de la conversion, l'outil crée plusieurs files:
 
 ```
 livre.pdf                    # Votre PDF source
@@ -162,7 +162,7 @@ tmp/                         # Images temporaires (nettoyé automatiquement)
 
 **Commandes de nettoyage:**
 ```bash
-# Supprimer tous les fichiers temporaires
+# Supprimer tous les files temporaires
 PYTHONPATH=src python3 src/pdf2epub/cli.py -i livre.pdf --clean
 
 # Ou manuellement
@@ -197,9 +197,9 @@ ai_proofreading:
   enabled: false
   provider: gemini  # gemini, openai, or claude
   model: gemini-2.5-flash
-  free_tier: true   # Plan gratuit Gemini (15 RPM) - voir GEMINI_FREE_TIER.md
-  delay_between_chunks: 5  # Délai entre chunks (5s pour plan gratuit)
-  chunk_size: 22000  # Auto-ajusté selon limites détectées
+  free_tier: true   # Gemini free tier (15 RPM) - see GEMINI_FREE_TIER.md
+  delay_between_chunks: 5  # Delay between chunks (5s for free tier)
+  chunk_size: 22000  # Auto-adjusted based on detected limits
   api_key: null  # or set via environment variable
 
 # Performance
@@ -245,7 +245,7 @@ Performance:
   --batch                   Mode automatique (pas de questions)
 
 Maintenance:
-  --clean                   Supprimer fichiers temporaires
+  --clean                   Supprimer files temporaires
   -d, --debug               Logs détaillés
 ```
 
@@ -503,23 +503,23 @@ brew install tesseract tesseract-lang                  # macOS
 
 **Validation des Chapitres**
 
-OCR peut mal lire les numéros : `17. Titre` → `47. Titre`
+OCR can misread numbers: `17. Titre` → `47. Titre`
 
-La validation automatique détecte ces erreurs. Voir [CHAPTER_VALIDATION.md](docs/CHAPTER_VALIDATION.md).
+Automatic validation detects these errors. See [CHAPTER_VALIDATION.md](docs/CHAPTER_VALIDATION.md).
 
 **Plan Gratuit Gemini**
 
-- 15 req/min, 1500 req/jour
+- 15 req/min, 1500 req/day
 - Délai automatique : 5s entre chunks
 - Temps : ~1min 30s pour 380k chars
 
-Si quota atteint → checkpoint automatique. Voir [GEMINI_FREE_TIER.md](docs/GEMINI_FREE_TIER.md).
+If quota reached → automatic checkpoint. See [GEMINI_FREE_TIER.md](docs/GEMINI_FREE_TIER.md).
 
 **Détection Automatique des Limites IA**
 
-Le système détecte votre limite de tokens et ajuste automatiquement les chunks.
+The system detects your token limit and automatically adjusts chunks.
 
-Voir [AI_AUTO_DETECTION.md](docs/AI_AUTO_DETECTION.md) pour détails techniques.
+See [AI_AUTO_DETECTION.md](docs/AI_AUTO_DETECTION.md) for technical details.
 
 ---
 ## � Documentation
@@ -527,7 +527,7 @@ Voir [AI_AUTO_DETECTION.md](docs/AI_AUTO_DETECTION.md) pour détails techniques.
 - **[QUICKSTART.md](docs/QUICKSTART.md)** - Démarrage rapide (5 minutes)
 - **[TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Guide de dépannage complet
 - **[CHANGELOG.md](docs/CHANGELOG.md)** - Historique des versions
-- **[GEMINI_FREE_TIER.md](docs/GEMINI_FREE_TIER.md)** - Configuration plan gratuit Gemini
+- **[GEMINI_FREE_TIER.md](docs/GEMINI_FREE_TIER.md)** - Gemini free tier configuration
 - **[AI_AUTO_DETECTION.md](docs/AI_AUTO_DETECTION.md)** - Détection automatique des limites IA
 - **[CHAPTER_VALIDATION.md](docs/CHAPTER_VALIDATION.md)** - Validation des chapitres OCR
 

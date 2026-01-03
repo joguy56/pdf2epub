@@ -1,113 +1,113 @@
-# Résumé des Changements - Plan Gratuit Gemini
+# Changes Summary - Gemini Free Tier
 
-## 📁 Fichiers Documentation (Nettoyage Effectué)
+## 📁 Documentation Files (Cleanup Done)
 
-### ✅ Fichiers Conservés (7 fichiers, 49 KB total)
+### ✅ Files Kept (7 files, 49 KB total)
 
-1. **README.md** (16 KB) - Documentation principale, simplifiée
-2. **QUICKSTART.md** (4.7 KB) - Guide de démarrage rapide
-3. **TROUBLESHOOTING.md** (6 KB) - Guide de dépannage complet (NOUVEAU)
-4. **CHANGELOG.md** (3.7 KB) - Historique des versions (NOUVEAU)
-5. **GEMINI_FREE_TIER.md** (4.3 KB) - Guide plan gratuit Gemini (NOUVEAU)
-6. **AI_AUTO_DETECTION.md** (8.4 KB) - Documentation technique détection auto
-7. **CHAPTER_VALIDATION.md** (5.5 KB) - Validation des chapitres OCR
+1. **README.md** (16 KB) - Main documentation, simplified
+2. **QUICKSTART.md** (4.7 KB) - Quick start guide
+3. **TROUBLESHOOTING.md** (6 KB) - Complete troubleshooting guide (NEW)
+4. **CHANGELOG.md** (3.7 KB) - Version history (NEW)
+5. **GEMINI_FREE_TIER.md** (4.3 KB) - Gemini free tier guide (NEW)
+6. **AI_AUTO_DETECTION.md** (8.4 KB) - Auto-detection technical documentation
+7. **CHAPTER_VALIDATION.md** (5.5 KB) - OCR chapter validation
 
-### 🗑️ Fichiers Supprimés (7 fichiers temporaires/redondants)
+### 🗑️ Files Deleted (7 temporary/redundant files)
 
-- `FREE_TIER_CHANGES.md` - Résumé temporaire (info dans CHANGELOG)
-- `AI_TOKEN_LIMITS.md` - Remplacé par AI_AUTO_DETECTION.md
-- `MULTITHREAD_ANALYSIS.md` - Analyse technique temporaire
-- `BUGFIX_02JAN2026.md` - Notes temporaires
-- `CHANGELOG_02JAN2026.md` - Notes temporaires (fusionné dans CHANGELOG.md)
-- `TEST_RESULTS_02JAN2026.md` - Résultats temporaires
-- `test_interactive.md` - Notes de test
+- `FREE_TIER_CHANGES.md` - Temporary summary (info in CHANGELOG)
+- `AI_TOKEN_LIMITS.md` - Replaced by AI_AUTO_DETECTION.md
+- `MULTITHREAD_ANALYSIS.md` - Temporary technical analysis
+- `BUGFIX_02JAN2026.md` - Temporary notes
+- `CHANGELOG_02JAN2026.md` - Temporary notes (merged into CHANGELOG.md)
+- `TEST_RESULTS_02JAN2026.md` - Temporary results
+- `test_interactive.md` - Test notes
 
-## 🔧 Modifications Code
+## 🔧 Code Modifications
 
 ### src/pdf2epub/config.py
-- ➕ `free_tier: bool = Field(default=True)` - Mode plan gratuit activé par défaut
-- ➕ `delay_between_chunks: int = Field(default=5)` - Délai configurable
+- ➕ `free_tier: bool = Field(default=True)` - Free tier mode enabled by default
+- ➕ `delay_between_chunks: int = Field(default=5)` - Configurable delay
 
 ### src/pdf2epub/ai_proofreader.py
-- ✅ Détection automatique des erreurs de quota (RESOURCE_EXHAUSTED, 429, quota)
-- ✅ Sauvegarde automatique de checkpoint quand quota atteint
-- ✅ Messages explicites avec limites du plan gratuit
-- ✅ Utilisation du délai configurable
-- ✅ Indication "(free tier: 15 RPM)" dans les logs
+- ✅ Automatic quota error detection (RESOURCE_EXHAUSTED, 429, quota)
+- ✅ Automatic checkpoint saving when quota reached
+- ✅ Explicit messages with free tier limits
+- ✅ Use of configurable delay
+- ✅ "(free tier: 15 RPM)" indication in logs
 
-## 📊 Configuration Par Défaut (Plan Gratuit)
+## 📊 Default Configuration (Free Tier)
 
 ```yaml
 ai_proofreading:
-  free_tier: true          # Activé par défaut
-  delay_between_chunks: 5  # 5s = 12 req/min < 15 RPM limite
-  chunk_size: 22000        # Auto-ajusté selon détection
+  free_tier: true          # Enabled by default
+  delay_between_chunks: 5  # 5s = 12 req/min < 15 RPM limit
+  chunk_size: 22000        # Auto-adjusted based on detection
 ```
 
-## ⏱️ Performance Plan Gratuit
+## ⏱️ Free Tier Performance
 
-| Métrique | Valeur |
-|----------|--------|
-| Délai entre chunks | 5 secondes |
-| Débit | 12 req/min (< 15 RPM ✅) |
-| Temps par livre (~380k chars) | ~1min 30s (17 chunks) |
-| Capacité quotidienne | ~88 livres/jour max |
+| Metric | Value |
+|--------|-------|
+| Delay between chunks | 5 seconds |
+| Throughput | 12 req/min (< 15 RPM ✅) |
+| Time per book (~380k chars) | ~1min 30s (17 chunks) |
+| Daily capacity | ~88 books/day max |
 
-## 🎯 Nouveautés
+## 🎯 New Features
 
-### 1. Gestion Intelligente du Quota
+### 1. Intelligent Quota Management
 ```
-❌ QUOTA LIMITE ATTEINTE !
-   Plan gratuit Gemini : 15 requêtes/minute, 1500 requêtes/jour
-   Chunks traités : 12/17
-   💡 Solution : Attendre 24h ou passer au plan payant
-   📁 Progression sauvegardée dans : gemini_checkpoint_12_of_17.txt
+ QUOTA LIMIT REACHED!
+   Gemini free tier: 15 requests/minute, 1500 requests/day
+   Chunks processed: 12/17
+   💡 Solution: Wait 24h or upgrade to paid plan
+   📁 Progress saved in: gemini_checkpoint_12_of_17.txt
 ```
 
-### 2. Détection Automatique des Limites
-- Teste votre API au démarrage (4k, 8k, 16k, 32k tokens)
-- S'adapte automatiquement si vous upgradez
-- Fallback intelligent si détection échoue (8000 tokens pour Gemini)
+### 2. Automatic Limit Detection
+- Tests your API at startup (4k, 8k, 16k, 32k tokens)
+- Automatically adapts if you upgrade
+- Intelligent fallback if detection fails (8000 tokens for Gemini)
 
-### 3. Configuration Optimisée
-- `pdf2epub.yaml.example` - Mis à jour avec paramètres free_tier
-- `pdf2epub_free_tier.yaml.example` - Config dédiée plan gratuit
+### 3. Optimized Configuration
+- `pdf2epub.yaml.example` - Updated with free_tier parameters
+- `pdf2epub_free_tier.yaml.example` - Dedicated free tier config
 
-### 4. Documentation Complète
-- **TROUBLESHOOTING.md** - Guide centralisé de dépannage
-- **CHANGELOG.md** - Historique propre des versions
-- **GEMINI_FREE_TIER.md** - Tout sur le plan gratuit
+### 4. Complete Documentation
+- **TROUBLESHOOTING.md** - Centralized troubleshooting guide
+- **CHANGELOG.md** - Clean version history
+- **GEMINI_FREE_TIER.md** - Everything about free tier
 
-## 🧪 Scripts de Test
+## 🧪 Test Scripts
 
-- `test_free_tier.py` - Vérification de la config plan gratuit
-- `test_ai_detection.py` - Test de détection automatique (déjà existant)
-- `verify_ai.py` - Vérification d'intégrité des EPUBs (déjà existant)
+- `test_free_tier.py` - Free tier configuration verification
+- `test_ai_detection.py` - Automatic detection test (already existing)
+- `verify_ai.py` - EPUB integrity verification (already existing)
 
-## 🚀 Utilisation
+## 🚀 Usage
 
-### Configuration Automatique (Aucune Action Requise)
+### Automatic Configuration (No Action Required)
 ```bash
-./pdf2epub.sh -i livre.pdf -a "Auteur" -t "Titre" -l fra --ai-proofread
+./pdf2epub.sh -i book.pdf -a "Author" -t "Title" -l fra --ai-proofread
 ```
 
-Le code est déjà configuré pour le plan gratuit !
+The code is already configured for free tier!
 
-### Test de Configuration
+### Configuration Test
 ```bash
 cd pdf2epub-refactored
 python3 test_free_tier.py
 ```
 
-### Upgrade vers Plan Payant (Futur)
+### Upgrade to Paid Plan (Future)
 ```yaml
-# Dans pdf2epub.yaml
+# In pdf2epub.yaml
 ai_proofreading:
-  free_tier: false         # Désactiver limitations
-  delay_between_chunks: 1  # Plus rapide
+  free_tier: false         # Disable limitations
+  delay_between_chunks: 1  # Faster processing
 ```
 
-## 📝 Commit Message Suggéré
+## 📝 Suggested Commit Message
 
 ```
 feat: Optimize for Gemini free tier + cleanup documentation
@@ -144,8 +144,8 @@ Deletions: ~500 lines (cleanup)
 Net: +300 lines (mostly documentation)
 ```
 
-## ✅ Prêt pour Commit
+## ✅ Ready for Commit
 
-Tous les fichiers sont nettoyés et documentés.  
-La configuration est optimisée pour le plan gratuit par défaut.  
-Les utilisateurs peuvent tester aujourd'hui sans atteindre le quota (vous l'avez probablement atteint).
+All files are clean and documented.  
+Configuration is optimized for free tier by default.  
+Users can test today without hitting quota (you probably hit it already).

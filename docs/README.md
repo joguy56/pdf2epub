@@ -1,74 +1,74 @@
-# 📚 Documentation pdf2epub
+# 📚 pdf2epub Documentation
 
-## Guides d'Utilisation
+## User Guides
 
-### 🚀 Démarrage Rapide
-**[QUICKSTART.md](QUICKSTART.md)** - Installez et convertissez votre premier PDF en 5 minutes
+### 🚀 Quick Start
+**[QUICKSTART.md](QUICKSTART.md)** - Install and convert your first PDF in 5 minutes
 
-### 📖 Documentation Complète
-**[../README.md](../README.md)** - Documentation principale du projet
+### 📖 Complete Documentation
+**[../README.md](../README.md)** - Main project documentation
 
-### 🔧 Dépannage
-**[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions aux problèmes courants
-- Installation Tesseract
-- Erreurs OCR
-- Validation des chapitres
-- Quota Gemini
-- Performance et mémoire
+### 🔧 Troubleshooting
+**[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Solutions to common problems
+- Tesseract Installation
+- OCR Errors
+- Chapter Validation
+- Gemini Quota
+- Performance and Memory
 
-## Guides Spécialisés
+## Specialized Guides
 
-### 🆓 Plan Gratuit Gemini
-**[GEMINI_FREE_TIER.md](GEMINI_FREE_TIER.md)** - Optimisation pour le plan gratuit
-- Limites : 15 req/min, 1500 req/jour
-- Configuration recommandée
-- Temps de traitement
-- Gestion du quota
+### 🆓 Gemini Free Tier
+**[GEMINI_FREE_TIER.md](GEMINI_FREE_TIER.md)** - Free tier optimization
+- Limits: 15 req/min, 1500 req/day
+- Recommended configuration
+- Processing time
+- Quota management
 
-### 🤖 Détection Automatique IA
-**[AI_AUTO_DETECTION.md](AI_AUTO_DETECTION.md)** - Comment fonctionne la détection automatique
-- Détection des limites de tokens
-- Calcul automatique de chunk_size
-- Fallback intelligent
-- Support multi-providers
+### 🤖 AI Auto-Detection
+**[AI_AUTO_DETECTION.md](AI_AUTO_DETECTION.md)** - How automatic detection works
+- Token limit detection
+- Automatic chunk_size calculation
+- Intelligent fallback
+- Multi-provider support
 
-### ✅ Validation des Chapitres
-**[CHAPTER_VALIDATION.md](CHAPTER_VALIDATION.md)** - Éviter les erreurs OCR
-- Erreurs de numérotation
-- Validation automatique
-- Correction manuelle
+### ✅ Chapter Validation
+**[CHAPTER_VALIDATION.md](CHAPTER_VALIDATION.md)** - Avoiding OCR errors
+- Numbering errors
+- Automatic validation
+- Manual correction
 
-## Historique
+## History
 
 ### 📝 Changelog
-**[CHANGELOG.md](CHANGELOG.md)** - Historique des versions
-- Version 2.0.0 - Refonte complète avec IA
-- Version 1.0.0 - Prototype original
+**[CHANGELOG.md](CHANGELOG.md)** - Version history
+- Version 2.0.0 - Complete rewrite with AI
+- Version 1.0.0 - Original prototype
 
-## Structure de la Documentation
+## Documentation Structure
 
 ```
 docs/
-├── README.md                 # Ce fichier (index)
-├── QUICKSTART.md             # Démarrage rapide
-├── TROUBLESHOOTING.md        # Guide de dépannage
-├── GEMINI_FREE_TIER.md       # Plan gratuit Gemini
-├── AI_AUTO_DETECTION.md      # Détection automatique
-├── CHAPTER_VALIDATION.md     # Validation chapitres
-├── CHANGELOG.md              # Historique
-└── COMMIT_SUMMARY.md         # Notes de commit (dev)
+ README.md                 # This file (index)
+ QUICKSTART.md             # Quick start
+ TROUBLESHOOTING.md        # Troubleshooting guide
+ GEMINI_FREE_TIER.md       # Gemini free tier
+ AI_AUTO_DETECTION.md      # Auto-detection
+ CHAPTER_VALIDATION.md     # Chapter validation
+ CHANGELOG.md              # History
+ COMMIT_SUMMARY.md         # Commit notes (dev)
 ```
 
-## Liens Rapides
+## Quick Links
 
-- **Installation** : [QUICKSTART.md#installation](QUICKSTART.md#installation)
-- **Premier PDF** : [QUICKSTART.md#conversion-simple](QUICKSTART.md#conversion-simple)
-- **Configuration IA** : [GEMINI_FREE_TIER.md#configuration-recommandée](GEMINI_FREE_TIER.md#configuration-recommandée)
-- **Problèmes Quota** : [TROUBLESHOOTING.md#correction-ia-et-quota](TROUBLESHOOTING.md#correction-ia-et-quota)
-- **Erreurs Chapitres** : [TROUBLESHOOTING.md#validation-des-chapitres](TROUBLESHOOTING.md#validation-des-chapitres)
+- **Installation**: [QUICKSTART.md#installation](QUICKSTART.md#installation)
+- **First PDF**: [QUICKSTART.md#simple-conversion](QUICKSTART.md#simple-conversion)
+- **AI Configuration**: [GEMINI_FREE_TIER.md#recommended-configuration](GEMINI_FREE_TIER.md#recommended-configuration)
+- **Quota Issues**: [TROUBLESHOOTING.md#ai-proofreading-and-quota](TROUBLESHOOTING.md#ai-proofreading-and-quota)
+- **Chapter Errors**: [TROUBLESHOOTING.md#chapter-validation](TROUBLESHOOTING.md#chapter-validation)
 
 ## Support
 
-Pour signaler un bug ou demander une fonctionnalité, ouvrez une issue sur GitHub.
+To report a bug or request a feature, please open an issue on GitHub.
 
-Retour au [README principal](../README.md)
+Back to [Main README](../README.md)

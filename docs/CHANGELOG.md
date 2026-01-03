@@ -2,83 +2,83 @@
 
 ## [2.0.0] - 2026-01-03
 
-### ✨ Nouvelles Fonctionnalités
+### ✨ New Features
 
-#### 🤖 Correction IA avec Détection Automatique
-- **Support multi-providers** : Gemini, OpenAI, Claude
-- **Détection automatique des limites** : Le système détecte la limite de tokens de sortie de votre API et ajuste automatiquement la taille des chunks
-- **Fallback intelligent** : Si la détection échoue, utilise des valeurs conservatives sûres (8000 tokens pour Gemini)
-- **Plan gratuit optimisé** : Configuration automatique pour respecter les limites du plan gratuit Gemini (15 RPM, 1500/jour)
-- **Gestion de quota** : Détection et sauvegarde automatique de checkpoint quand quota atteint
+#### 🤖 AI Proofreading with Automatic Detection
+- **Multi-provider support**: Gemini, OpenAI, Claude
+- **Automatic limit detection**: The system detects your API's output token limit and automatically adjusts chunk sizes
+- **Intelligent fallback**: If detection fails, uses conservative safe values (8000 tokens for Gemini)
+- **Free tier optimized**: Automatic configuration to respect Gemini free tier limits (15 RPM, 1500/day)
+- **Quota management**: Detection and automatic checkpoint saving when quota reached
 
-#### 📖 Validation de Chapitres
-- **Détection d'erreurs OCR** : Identifie automatiquement les numéros de chapitres mal reconnus
-- **Validation intégrée** : Lance la validation avant le traitement IA pour éviter le gaspillage d'API calls
-- **Suggestions de correction** : Affiche les erreurs avec numéros de ligne et suggestions
+#### 📖 Chapter Validation
+- **OCR error detection**: Automatically identifies misrecognized chapter numbers
+- **Integrated validation**: Runs validation before AI processing to avoid wasting API calls
+- **Correction suggestions**: Shows errors with line numbers and suggestions
 
 #### ⚡ Performance
-- **Traitement parallèle** : Multiprocessing pour OCR plus rapide
-- **Checkpoints automatiques** : Reprise sur erreur sans perte de progression
-- **Gestion mémoire optimisée** : Support de gros livres (500+ pages)
+- **Parallel processing**: Multiprocessing for faster OCR
+- **Automatic checkpoints**: Resume on error without losing progress
+- **Optimized memory**: Support for large books (500+ pages)
 
-### 🔧 Améliorations
+### 🔧 Improvements
 
 #### Configuration
-- **Fichiers YAML** : Configuration hiérarchique avec valeurs par défaut
-- **Variables d'environnement** : Support pour clés API et paramètres sensibles
-- **Modes de traitement** : `--pdf-only`, `--ocr-only`, `--generate-epub-only`, `--ai-proofread`
-- **Mode wizard** : Assistant interactif pour débutants
+- **YAML files**: Hierarchical configuration with default values
+- **Environment variables**: Support for API keys and sensitive parameters
+- **Processing modes**: `--pdf-only`, `--ocr-only`, `--generate-epub-only`, `--ai-proofread`
+- **Wizard mode**: Interactive assistant for beginners
 
 #### Code
-- **Architecture moderne** : Séparation claire des responsabilités (PDF → OCR → Text → AI → EPUB)
-- **Type hints** : Python 3.10+ avec annotations complètes
-- **Gestion d'erreurs** : Exceptions typées et messages clairs
-- **Logging** : Logs colorés avec niveaux de détail
+- **Modern architecture**: Clear separation of responsibilities (PDF → OCR → Text → AI → EPUB)
+- **Type hints**: Python 3.10+ with complete annotations
+- **Error handling**: Typed exceptions and clear messages
+- **Logging**: Colored logs with detail levels
 
-### 🐛 Corrections de Bugs
+### 🐛 Bug Fixes
 
-- **Troncature IA** : Résolution du problème de perte de chapitres (détection automatique des limites)
-- **Ordre des pages** : Correction du traitement parallèle qui pouvait mélanger les pages
-- **Numérotation chapitres** : Validation OCR pour éviter les erreurs de reconnaissance
-- **Gestion mémoire** : Optimisation pour éviter les OOM sur gros fichiers
-- **Encodage** : Support UTF-8 complet pour caractères spéciaux et accents
+- **AI truncation**: Resolved chapter loss problem (automatic limit detection)
+- **Page order**: Fixed parallel processing that could mix pages
+- **Chapter numbering**: OCR validation to avoid recognition errors
+- **Memory management**: Optimization to avoid OOM on large files
+- **Encoding**: Full UTF-8 support for special characters and accents
 
 ### 📚 Documentation
 
-- **README complet** : Guide utilisateur avec exemples
-- **QUICKSTART** : Démarrage rapide en 5 minutes
-- **GEMINI_FREE_TIER** : Guide détaillé du plan gratuit
-- **AI_AUTO_DETECTION** : Explication technique de la détection automatique
-- **CHAPTER_VALIDATION** : Guide de validation des chapitres
+- **Complete README**: User guide with examples
+- **QUICKSTART**: Quick start in 5 minutes
+- **GEMINI_FREE_TIER**: Detailed free tier guide
+- **AI_AUTO_DETECTION**: Technical explanation of automatic detection
+- **CHAPTER_VALIDATION**: Chapter validation guide
 
 ### 🧪 Tests
 
-- **Tests unitaires** : Coverage des fonctions critiques
-- **Tests d'intégration** : Validation du pipeline complet
-- **Tests de régression** : Vérification automatique des résultats
+- **Unit tests**: Coverage of critical functions
+- **Integration tests**: Full pipeline validation
+- **Regression tests**: Automatic results verification
 
-### ⚙️ Configuration Plan Gratuit Gemini
+### ⚙️ Gemini Free Tier Configuration
 
-Par défaut, le système est optimisé pour le plan gratuit :
-- `free_tier: true` - Active les délais adaptés
-- `delay_between_chunks: 5` - 5 secondes entre chunks (12 req/min < 15 RPM)
-- `chunk_size: 22000` - Taille sûre pour limite 8k tokens
+By default, the system is optimized for the free tier:
+- `free_tier: true` - Activates adapted delays
+- `delay_between_chunks: 5` - 5 seconds between chunks (12 req/min < 15 RPM)
+- `chunk_size: 22000` - Safe size for 8k token limit
 
-**Temps de traitement** : ~1min 30s pour un livre de 380k caractères (17 chunks)  
-**Capacité quotidienne** : ~88 livres/jour maximum
+**Processing time**: ~1min 30s for a 380k character book (17 chunks)  
+**Daily capacity**: ~88 books/day maximum
 
 ---
 
-## [1.0.0] - Prototype Original
+## [1.0.0] - Original Prototype
 
-### Fonctionnalités Initiales
-- Conversion PDF → EPUB avec OCR Tesseract
-- Détection basique de chapitres
-- Post-traitement du texte (hyphénation, dialogues)
-- Interface en ligne de commande
+### Initial Features
+- PDF → EPUB conversion with Tesseract OCR
+- Basic chapter detection
+- Text post-processing (hyphenation, dialogs)
+- Command-line interface
 
 ### Limitations
-- Code monolithique difficile à maintenir
-- Pas de gestion d'erreurs robuste
-- Configuration en dur dans le code
-- Pas de tests automatisés
+- Monolithic code difficult to maintain
+- No robust error handling
+- Hardcoded configuration
+- No automated tests
